@@ -52,7 +52,7 @@ Yang sudah **diimplementasikan dengan benar** untuk demo akademis:
 
 ---
 
-## 🏥 Medical Workflow (Skripsi-grade)
+## 🏥 Medical Workflow
 
 Berbeda dengan MVP awal, sistem ini memodelkan **workflow medis nyata** untuk donor darah, sesuai standar PMI / Permenkes:
 
