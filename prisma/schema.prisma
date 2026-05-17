@@ -1,0 +1,389 @@
+// =====================================================================
+// BLOOD CONNECT - Database Schema (v2 - Medical Workflow)
+// =====================================================================
+// Skema lengkap dengan workflow medis:
+//   - PemeriksaanDonor: pemeriksaan fisik (Hb, BP, BB) time-series
+//   - ScreeningAnswer: kuesioner pre-donor (riwayat penyakit, perilaku)
+//   - BloodComponent enum: Whole Blood, PRC, FFP, TC (shelf life beda)
+//   - AuditLog: jejak perubahan data stok & request (compliance)
+//   - RS verification: admin harus approve sebelum RS bisa transact
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------
+
+enum Role {
+  PENDONOR
+  PASIEN
+  RUMAH_SAKIT
+  ADMIN
+}
+
+enum BloodType {
+  A
+  B
+  AB
+  O
+}
+
+enum RhesusType {
+  POSITIVE
+  NEGATIVE
+}
+
+// Komponen darah dengan shelf life berbeda
+enum BloodComponent {
+  WHOLE_BLOOD   // 35-42 hari
+  PRC           // Packed Red Cells — 42 hari
+  FFP           // Fresh Frozen Plasma — 1 tahun beku
+  TC            // Thrombocyte Concentrate — 5 hari
+  CRYO          // Cryoprecipitate — 1 tahun beku
+}
+
+enum RequestStatus {
+  PENDING
+  PROCESSING
+  MATCHED_STOCK
+  MATCHED_DONOR
+  IN_TRANSIT       // darah sedang diantar
+  FULFILLED
+  REJECTED
+  CANCELLED
+}
+
+enum StockStatus {
+  AVAILABLE
+  RESERVED
+  EXPIRED
+  USED
+  QUARANTINE       // belum lolos uji
+}
+
+enum ScheduleStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum HospitalStatus {
+  UNVERIFIED       // baru daftar, menunggu admin
+  VERIFIED         // disetujui admin, bisa transact
+  SUSPENDED
+}
+
+enum NotificationType {
+  ELIGIBLE_DONOR_REQUEST
+  REQUEST_STATUS_UPDATE
+  SCHEDULE_UPDATE
+  STOCK_ALERT
+  ACCOUNT_VERIFICATION
+  GENERIC
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  STOCK_ALLOCATE
+}
+
+// ---------------------------------------------------------------------
+// USER (base)
+// ---------------------------------------------------------------------
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  phoneNum    String
+  address     String?
+  city        String
+  birthDate   DateTime?     // wajib untuk validasi usia donor (17-65)
+  role        Role
+  isBlocked   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pendonor    Pendonor?
+  pasien      Pasien?
+  rumahSakit  RumahSakit?
+  notifications Notification[]
+  auditLogs   AuditLog[]
+
+  @@index([city])
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------
+// PENDONOR
+// ---------------------------------------------------------------------
+model Pendonor {
+  id                String      @id @default(cuid())
+  userId            String      @unique
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bloodType         BloodType
+  rhesusType        RhesusType
+  weight            Float?              // kg — wajib ≥45 kg
+  lastDonationDate  DateTime?
+  isActive          Boolean     @default(true)
+  isEligible        Boolean     @default(false)
+  eligibilityReason String?
+  totalDonations    Int         @default(0)
+
+  schedules         JadwalDonor[]
+  history           DonorHistory[]
+  notifResponses    DonorNotification[]
+  checkups          PemeriksaanDonor[]
+  screenings        ScreeningAnswer[]
+
+  @@index([bloodType, rhesusType, isEligible])
+}
+
+// ---------------------------------------------------------------------
+// PEMERIKSAAN DONOR — Hb/BP/BB time-series (HARUS diisi sebelum donor)
+// ---------------------------------------------------------------------
+model PemeriksaanDonor {
+  id                  String   @id @default(cuid())
+  donorId             String
+  donor               Pendonor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  examinedAt          DateTime @default(now())
+  examinedBy          String?           // nakes / nurse ID
+  hemoglobinLevel     Float             // g/dL
+  systolicBP          Int               // mmHg — atas
+  diastolicBP         Int               // mmHg — bawah
+  bodyTempC           Float             // suhu Celsius
+  pulseRate           Int               // BPM
+  weight              Float             // kg saat pemeriksaan
+  notes               String?
+  passed              Boolean           // hasil overall lolos / tidak
+
+  @@index([donorId, examinedAt])
+}
+
+// ---------------------------------------------------------------------
+// SCREENING ANSWER — kuesioner pra-donor (riwayat penyakit, perilaku)
+// ---------------------------------------------------------------------
+model ScreeningAnswer {
+  id            String   @id @default(cuid())
+  donorId       String
+  donor         Pendonor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  answeredAt    DateTime @default(now())
+
+  // Pertanyaan standar PMI
+  hasFever              Boolean @default(false)   // demam 7 hari terakhir
+  recentSurgery         Boolean @default(false)   // operasi 6 bulan terakhir
+  recentTattoo          Boolean @default(false)   // tato/tindik 6 bulan
+  isPregnantOrLactating Boolean @default(false)
+  onMedication          Boolean @default(false)
+  hasHIVOrHepatitis     Boolean @default(false)
+  riskySexualBehavior   Boolean @default(false)
+  recentVaccination     Boolean @default(false)   // vaksin 2 minggu
+  details               String?
+
+  passed        Boolean  // false jika ada flag berisiko
+}
+
+// ---------------------------------------------------------------------
+// PASIEN
+// ---------------------------------------------------------------------
+model Pasien {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nik         String?  @unique
+  // Note: bloodType pasien tidak disimpan di sini — bisa request darah untuk
+  // anggota keluarga dengan golongan beda. Tetap di PermintaanDonor.
+
+  requests    PermintaanDonor[]
+}
+
+// ---------------------------------------------------------------------
+// RUMAH SAKIT — dengan verifikasi admin
+// ---------------------------------------------------------------------
+model RumahSakit {
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospitalName  String
+  hospitalCode  String         @unique
+  hospitalLoc   String
+  status        HospitalStatus @default(UNVERIFIED)
+  verifiedAt    DateTime?
+  verifiedById  String?         // user.id admin yang approve
+  licenseDoc    String?         // URL upload SIUP/izin RS
+
+  stocks        StokDarah[]
+  requests      PermintaanDonor[]
+}
+
+// ---------------------------------------------------------------------
+// STOK DARAH — per-batch dengan komponen darah
+// ---------------------------------------------------------------------
+model StokDarah {
+  id            String         @id @default(cuid())
+  hospitalId    String
+  hospital      RumahSakit     @relation(fields: [hospitalId], references: [id])
+
+  bloodType     BloodType
+  rhesusType    RhesusType
+  component     BloodComponent @default(WHOLE_BLOOD)
+  quantity      Int
+  expiryDate    DateTime
+  location      String
+  status        StockStatus    @default(QUARANTINE)  // default karantina, lolos uji baru AVAILABLE
+  source        String?                              // donor ID / impor
+  donorId       String?                              // jika berasal dari pendonor specific
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  allocations   StockAllocation[]
+
+  @@index([bloodType, rhesusType, component, status, expiryDate])
+  @@index([location])
+}
+
+// ---------------------------------------------------------------------
+// PERMINTAAN DONOR
+// ---------------------------------------------------------------------
+model PermintaanDonor {
+  id            String         @id @default(cuid())
+  patientId     String?
+  patient       Pasien?        @relation(fields: [patientId], references: [id])
+  hospitalId    String?
+  hospital      RumahSakit?    @relation(fields: [hospitalId], references: [id])
+
+  bloodType     BloodType
+  rhesusType    RhesusType
+  component     BloodComponent @default(WHOLE_BLOOD)
+  quantity      Int
+  urgency       String         @default("NORMAL")   // NORMAL | URGENT | CRITICAL
+  reason        String?
+  doctorName    String?                             // dokter yang request
+  reqStatus     RequestStatus  @default(PENDING)
+  createdAt     DateTime       @default(now())
+  fulfilledAt   DateTime?
+
+  allocations   StockAllocation[]
+  donorNotifs   DonorNotification[]
+
+  @@index([reqStatus, createdAt])
+  @@index([bloodType, rhesusType, component])
+}
+
+// ---------------------------------------------------------------------
+// STOCK ALLOCATION
+// ---------------------------------------------------------------------
+model StockAllocation {
+  id          String           @id @default(cuid())
+  requestId   String
+  request     PermintaanDonor  @relation(fields: [requestId], references: [id])
+  stockId     String
+  stock       StokDarah        @relation(fields: [stockId], references: [id])
+  quantity    Int
+  createdAt   DateTime         @default(now())
+
+  @@unique([requestId, stockId])
+}
+
+// ---------------------------------------------------------------------
+// JADWAL DONOR
+// ---------------------------------------------------------------------
+model JadwalDonor {
+  id          String         @id @default(cuid())
+  donorId     String
+  donor       Pendonor       @relation(fields: [donorId], references: [id])
+  jadwal      DateTime
+  sesi        String
+  status      ScheduleStatus @default(PENDING)
+  newDate     DateTime?
+  note        String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([jadwal, status])
+}
+
+// ---------------------------------------------------------------------
+// DONOR HISTORY
+// ---------------------------------------------------------------------
+model DonorHistory {
+  id          String         @id @default(cuid())
+  donorId     String
+  donor       Pendonor       @relation(fields: [donorId], references: [id])
+  donationDate DateTime      @default(now())
+  location    String
+  volumeMl    Int            @default(450)
+  component   BloodComponent @default(WHOLE_BLOOD)
+  note        String?
+
+  @@index([donorId, donationDate])
+}
+
+// ---------------------------------------------------------------------
+// DONOR NOTIFICATION
+// ---------------------------------------------------------------------
+model DonorNotification {
+  id          String          @id @default(cuid())
+  donorId     String
+  donor       Pendonor        @relation(fields: [donorId], references: [id])
+  requestId   String
+  request     PermintaanDonor @relation(fields: [requestId], references: [id])
+  notifiedAt  DateTime        @default(now())
+  responded   Boolean         @default(false)
+  accepted    Boolean?
+  respondedAt DateTime?
+
+  @@unique([donorId, requestId])
+  @@index([requestId, responded])
+}
+
+// ---------------------------------------------------------------------
+// NOTIFICATION (in-app)
+// ---------------------------------------------------------------------
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  meta      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+// ---------------------------------------------------------------------
+// AUDIT LOG — compliance (UU PDP / regulasi medis)
+// ---------------------------------------------------------------------
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?              // siapa yang melakukan aksi (null = system)
+  user        User?       @relation(fields: [userId], references: [id])
+  action      AuditAction
+  entity      String               // "StokDarah" | "PermintaanDonor" | dll
+  entityId    String
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
