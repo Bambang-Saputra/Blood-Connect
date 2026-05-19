@@ -447,5 +447,3 @@ Index strategis untuk MatchSystem:
 - Backup database harian + audit log untuk perubahan `StokDarah` dan `PermintaanDonor`.
 
 ---
-
-**© 2026 Kelompok 1 — Software Engineering AOL**
