@@ -47,5 +47,6 @@ router.patch("/admin/schedules/:id", requireAuth, requireRole("ADMIN"), admin.up
 router.get("/admin/requests", requireAuth, requireRole("ADMIN"), admin.listRequests);
 router.get("/admin/hospitals", requireAuth, requireRole("ADMIN"), admin.listHospitals);
 router.patch("/admin/hospitals/:id/verify", requireAuth, requireRole("ADMIN"), admin.verifyHospital);
+router.get("/admin/stocks/quarantine", requireAuth, requireRole("ADMIN"), admin.listQuarantineStocks);
 
 export default router;

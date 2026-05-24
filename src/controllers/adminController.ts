@@ -97,6 +97,16 @@ export async function listRequests(req: AuthedRequest, res: Response) {
   return res.json({ data });
 }
 
+// ===== 3b) List stok yang menunggu verifikasi (QUARANTINE) =====
+export async function listQuarantineStocks(_req: AuthedRequest, res: Response) {
+  const data = await prisma.stokDarah.findMany({
+    where: { status: "QUARANTINE" },
+    include: { hospital: { select: { hospitalName: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return res.json({ data });
+}
+
 // ===== 4) List RS yang menunggu verifikasi =====
 export async function listHospitals(req: AuthedRequest, res: Response) {
   const status = req.query.status as HospitalStatus | undefined;
