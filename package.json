@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "admin:create": "tsx scripts/createAdmin.ts",
+    "seed": "tsx scripts/seed.ts",
     "job:expiry": "tsx src/jobs/stockExpiryJob.ts"
   },
   "dependencies": {
