@@ -181,18 +181,24 @@ npm run prisma:migrate
 Saat diminta nama migration: ketik `init` → Enter.
 Akan terbentuk 13 tabel di Neon dashboard.
 
-### 5. Buat Akun Admin Pertama
+### 5. Bootstrap Data Demo
 
-Admin **TIDAK BISA self-register** (security). Bootstrap lewat script:
+**Opsi A — Seed lengkap (Recommended untuk demo AOL):**
+```powershell
+npm run seed
+```
 
+Membuat:
+- 1 Admin (`admin@bloodconnect.id` / `admin12345`)
+- 2 RS (`rscm@test.com` VERIFIED dengan 5 batch stok; `rsfm@test.com` UNVERIFIED untuk demo workflow)
+- 3 Pendonor (1 sudah eligible, 1 perlu skrining, 1 di kota beda)
+- 2 Pasien siap request
+
+Semua password (kecuali admin): `password123`.
+
+**Opsi B — Cuma buat admin saja:**
 ```powershell
 npm run admin:create
-```
-
-Default kredensial (override dengan env `ADMIN_EMAIL` / `ADMIN_PASSWORD` jika mau):
-```
-Email:    admin@bloodconnect.id
-Password: admin12345
 ```
 
 ### 6. Jalankan Website
