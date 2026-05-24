@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { clearToken } from "../../lib/api";
+import { api, clearToken } from "../../lib/api";
+import { toast } from "../../lib/toast";
 
 /**
  * ============================================================
@@ -13,16 +14,6 @@ import { clearToken } from "../../lib/api";
  *   - CHECK AVAILABILITY → cek stok darah di RS terdekat
  * ============================================================
  */
-
-const api = (path: string, init?: RequestInit) =>
-  fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("token") : ""}`,
-      ...(init?.headers ?? {}),
-    },
-  });
 
 export default function PatientDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -41,8 +32,8 @@ export default function PatientDashboard() {
       method: "POST",
       body: JSON.stringify({ ...form, quantity: Number(form.quantity) }),
     });
-    if (res.ok) { alert("Permintaan dikirim. MatchSystem memproses..."); refresh(); }
-    else alert((await res.json()).error);
+    if (res.ok) { toast.success("Permintaan dikirim. MatchSystem memproses..."); refresh(); }
+    else toast.error((await res.json()).error ?? "Gagal mengirim permintaan");
   }
 
   return (
