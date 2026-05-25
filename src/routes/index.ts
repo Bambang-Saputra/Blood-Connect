@@ -5,6 +5,7 @@ import * as donor from "../controllers/donorController";
 import * as stock from "../controllers/stockController";
 import * as medical from "../controllers/medicalController";
 import * as admin from "../controllers/adminController";
+import * as notif from "../controllers/notificationController";
 import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
@@ -13,6 +14,16 @@ const router = Router();
 router.post("/auth/register", auth.register);
 router.post("/auth/login", auth.login);
 router.post("/auth/logout", requireAuth, auth.logout);
+router.get("/auth/me", requireAuth, auth.getMe);
+router.patch("/auth/me", requireAuth, auth.updateMe);
+router.post("/auth/me/enable-mode", requireAuth, auth.enableMode);
+router.post("/auth/switch-role", requireAuth, auth.switchRole);
+
+// ---------------------- NOTIFICATION INBOX ---------------------------
+router.get("/notifications", requireAuth, notif.listMyNotifications);
+router.get("/notifications/count", requireAuth, notif.unreadCount);
+router.patch("/notifications/read-all", requireAuth, notif.markAllRead);
+router.patch("/notifications/:id/read", requireAuth, notif.markRead);
 
 // ---------------------- REQUEST DARAH + MATCHSYSTEM ------------------
 router.get("/requests", requireAuth, match.listMyRequests);          // ?mine=true implicit
@@ -28,6 +39,8 @@ router.post("/donor/schedules", requireAuth, requireRole("PENDONOR"), donor.crea
 router.get("/donor/history", requireAuth, requireRole("PENDONOR"), donor.getDonorHistory);
 router.get("/donor/notifications", requireAuth, requireRole("PENDONOR"), donor.listMyNotifications);
 router.post("/donor/notifications/:id/respond", requireAuth, requireRole("PENDONOR"), donor.respondNotification);
+router.get("/donor/open-requests", requireAuth, requireRole("PENDONOR"), donor.listOpenRequests);
+router.post("/donor/volunteer/:requestId", requireAuth, requireRole("PENDONOR"), donor.volunteerForRequest);
 
 // ---------------------- MEDICAL (Pemeriksaan + Screening) ------------
 router.get("/medical/donor-lookup", requireAuth, requireRole("ADMIN", "RUMAH_SAKIT"), medical.lookupDonor);
