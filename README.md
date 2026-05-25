@@ -289,14 +289,26 @@ Otomatis di-set EXPIRED untuk stok yang lewat tanggal kadaluarsa.
 ¹ RS harus berstatus VERIFIED (di-approve admin) sebelum bisa request.
 
 ### Pendonor
-| Method | Path                                       | Use Case          |
-|--------|--------------------------------------------|-------------------|
-| GET    | `/api/donor/me`                            | Profil + status   |
-| POST   | `/api/donor/check-eligible`                | **CHECKELIGIBLE** |
-| POST   | `/api/donor/schedules`                     | **DAFTAR DONOR**  |
-| GET    | `/api/donor/history`                       | **HISTORY**       |
-| GET    | `/api/donor/notifications`                 | List undangan     |
-| POST   | `/api/donor/notifications/:id/respond`     | Respons match     |
+| Method | Path                                       | Use Case               |
+|--------|--------------------------------------------|------------------------|
+| GET    | `/api/donor/me`                            | Profil + status        |
+| POST   | `/api/donor/check-eligible`                | **CHECKELIGIBLE**      |
+| POST   | `/api/donor/schedules`                     | **DAFTAR DONOR**       |
+| GET    | `/api/donor/history`                       | **HISTORY**            |
+| GET    | `/api/donor/notifications`                 | List undangan match    |
+| POST   | `/api/donor/notifications/:id/respond`     | Respons match          |
+| GET    | `/api/donor/open-requests`                 | Browse semua request aktif (proaktif) |
+| POST   | `/api/donor/volunteer/:requestId`          | Volunteer ke request tanpa di-tag |
+
+### Profile & Notification Inbox (semua role)
+| Method | Path                                | Use Case              |
+|--------|-------------------------------------|------------------------|
+| GET    | `/api/auth/me`                      | Load profile           |
+| PATCH  | `/api/auth/me`                      | **UPDATE PROFIL**      |
+| GET    | `/api/notifications`                | Inbox notifikasi       |
+| GET    | `/api/notifications/count`          | Badge unread count     |
+| PATCH  | `/api/notifications/:id/read`       | Tandai dibaca          |
+| PATCH  | `/api/notifications/read-all`       | Tandai semua dibaca    |
 
 ### Medical (Pemeriksaan + Skrining)
 | Method | Path                            | Role            | Fungsi                |
