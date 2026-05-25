@@ -15,15 +15,25 @@ export function clearToken() {
 }
 
 export async function api(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
-  return res;
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+    return res;
+  } catch (err) {
+    // Network error (server down, CORS block, dll) — log untuk debugging
+    console.error(`[api] ${init?.method ?? "GET"} ${path} failed:`, err);
+    // Return a fake response biar caller tidak crash
+    return new Response(JSON.stringify({
+      error: "Tidak bisa terhubung ke server. Pastikan API jalan di " + API_URL,
+      networkError: true,
+    }), { status: 0, headers: { "Content-Type": "application/json" } });
+  }
 }
 
 export function dashboardPath(role: string) {
