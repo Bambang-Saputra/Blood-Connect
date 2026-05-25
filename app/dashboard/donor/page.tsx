@@ -6,6 +6,7 @@ import { api, clearToken } from "../../lib/api";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { ModeSwitcher } from "../../lib/ModeSwitcher";
+import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
 /**
  * DASHBOARD: PENDONOR (medical workflow)
@@ -82,35 +83,49 @@ export default function DonorDashboard() {
   const lastScreening = me.screenings[0];
 
   return (
-    <main className="max-w-6xl mx-auto p-8 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Halo, {me.user.name}</h1>
-          <p className="text-slate-500 text-sm">
-            Golongan: {me.bloodType}{me.rhesusType === "POSITIVE" ? "+" : "-"} · Kota: {me.user.city}
-          </p>
+    <main className="max-w-6xl mx-auto p-6 lg:p-8 space-y-6">
+      <header className="flex flex-wrap gap-4 justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-2xl flex items-center justify-center font-bold text-xl shadow-md shadow-red-600/20">
+            {me.bloodType}{me.rhesusType === "POSITIVE" ? "+" : "-"}
+          </div>
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-red-700 to-red-500 bg-clip-text text-transparent">
+              Halo, {me.user.name}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              📍 {me.user.city} · Total donasi: <strong>{(me as any).totalDonations ?? 0}</strong>
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <ModeSwitcher currentRole="PENDONOR" />
           <NotificationBell />
-          <Link href="/dashboard/profile" className="text-sm text-slate-600 hover:text-red-600">
-            Profil
+          <Link href="/dashboard/profile">
+            <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
-          <button
-            onClick={() => { clearToken(); location.href = "/"; }}
-            className="text-sm text-slate-500 hover:text-red-600"
-          >
-            Logout
-          </button>
+          <Button variant="ghost" size="sm" icon={<Icons.Logout />}
+            onClick={() => { clearToken(); location.href = "/"; }}>Keluar</Button>
         </div>
       </header>
 
       {/* Status Banner */}
-      <div className={`p-4 rounded-lg ${me.isEligible ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}>
-        <p className="font-semibold">
-          {me.isEligible ? "✅ Anda LAYAK donor" : "⚠️ Belum layak donor"}
-        </p>
-        {me.eligibilityReason && <p className="text-sm mt-1 text-slate-600">{me.eligibilityReason}</p>}
+      <div className={`relative p-5 rounded-2xl border-2 overflow-hidden ${
+        me.isEligible
+          ? "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200"
+          : "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200"
+      }`}>
+        <div className="absolute -right-4 -top-4 text-7xl opacity-10">
+          {me.isEligible ? "✅" : "⚠️"}
+        </div>
+        <div className="relative">
+          <p className={`font-bold text-lg ${me.isEligible ? "text-emerald-800" : "text-amber-800"}`}>
+            {me.isEligible ? "✅ Anda LAYAK Donor Darah" : "⚠️ Belum Layak Donor"}
+          </p>
+          {me.eligibilityReason && (
+            <p className="text-sm mt-1 text-slate-700">{me.eligibilityReason}</p>
+          )}
+        </div>
       </div>
 
       {/* Step-by-step workflow */}
@@ -134,9 +149,11 @@ export default function DonorDashboard() {
           step={3} title="Cek Kelayakan & Daftar"
           status={me.isEligible ? "done" : "todo"}
           desc={me.isEligible ? "Anda bisa daftar jadwal donor" : "Jalankan cek setelah skrining + pemeriksaan"}
-          action={<button onClick={handleCheckEligible} disabled={loading} className="bg-red-600 text-white px-3 py-1 rounded text-sm">
-            {loading ? "Cek..." : "Cek Kelayakan"}
-          </button>}
+          action={
+            <Button size="sm" loading={loading} onClick={handleCheckEligible} icon={<Icons.Check />}>
+              Cek Kelayakan
+            </Button>
+          }
         />
       </section>
 
@@ -162,99 +179,107 @@ export default function DonorDashboard() {
         </div>
       )}
 
-      {/* Notifikasi MatchSystem (yang di-tag khusus) */}
-      <section className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-1">📩 Permintaan untuk Anda ({notifs.length})</h2>
-        <p className="text-xs text-slate-500 mb-3">MatchSystem secara khusus memanggil Anda berdasarkan kecocokan & lokasi</p>
+      {/* Notifikasi MatchSystem */}
+      <Card title={`Permintaan untuk Anda (${notifs.length})`}
+        subtitle="MatchSystem secara khusus memanggil Anda berdasarkan kecocokan & lokasi"
+        icon={<span>📩</span>}>
         {notifs.length === 0 ? (
-          <p className="text-slate-500 text-sm">Belum ada permintaan personal saat ini. Cek "Permintaan Tersedia" di bawah untuk volunteer.</p>
+          <EmptyState icon="📭"
+            title="Belum ada permintaan personal"
+            description="Cek 'Permintaan Tersedia' di bawah untuk volunteer secara proaktif." />
         ) : (
-          notifs.map((n) => (
-            <div key={n.id} className="border p-4 rounded mb-2 flex justify-between items-center">
-              <div>
-                <p className="font-medium">
-                  {n.request.bloodType}{n.request.rhesusType === "POSITIVE" ? "+" : "-"} — {n.request.quantity} kantong ({n.request.component})
-                </p>
-                <span className={`text-xs px-2 py-0.5 rounded ${
-                  n.request.urgency === "CRITICAL" ? "bg-red-100 text-red-700" :
-                  n.request.urgency === "URGENT" ? "bg-orange-100 text-orange-700" :
-                  "bg-slate-100"
-                }`}>{n.request.urgency}</span>
+          <div className="space-y-2">
+            {notifs.map((n) => (
+              <div key={n.id}
+                className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center font-bold shadow-sm">
+                    {n.request.bloodType}{n.request.rhesusType === "POSITIVE" ? "+" : "-"}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{n.request.quantity} kantong · {n.request.component}</p>
+                    <Badge status={n.request.urgency} className="mt-1" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="success" size="sm" icon={<Icons.Check />}
+                    onClick={() => handleRespond(n.requestId, true)}>Bersedia</Button>
+                  <Button variant="secondary" size="sm" icon={<Icons.X />}
+                    onClick={() => handleRespond(n.requestId, false)}>Tolak</Button>
+                </div>
               </div>
-              <div className="space-x-2">
-                <button onClick={() => handleRespond(n.requestId, true)} className="bg-green-600 text-white px-3 py-1 rounded text-sm">Bersedia</button>
-                <button onClick={() => handleRespond(n.requestId, false)} className="bg-slate-300 px-3 py-1 rounded text-sm">Tolak</button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
-      </section>
+      </Card>
 
       {/* Browse Open Requests — Proaktif */}
-      <section className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-1">🩸 Permintaan Tersedia ({openRequests.length})</h2>
-        <p className="text-xs text-slate-500 mb-3">
-          Semua permintaan darah aktif yang kompatibel dengan golongan Anda. Anda bisa volunteer langsung walaupun tidak di-tag.
-        </p>
+      <Card title={`Permintaan Tersedia (${openRequests.length})`}
+        subtitle="Semua permintaan kompatibel dengan golongan darah Anda — volunteer proaktif"
+        icon={<Icons.Drop />}>
         {openRequests.length === 0 ? (
-          <div className="text-center py-6 text-slate-400">
-            <p className="text-3xl mb-2">🎉</p>
-            <p className="text-sm">Tidak ada permintaan aktif saat ini.</p>
-            <p className="text-xs">Semua kebutuhan darah sudah terpenuhi dari stok rumah sakit.</p>
-          </div>
+          <EmptyState icon="🎉"
+            title="Tidak ada permintaan aktif"
+            description="Semua kebutuhan darah sudah terpenuhi dari stok rumah sakit." />
         ) : (
           <div className="space-y-2">
             {openRequests.map((r) => (
-              <div key={r.id} className="border p-3 rounded flex justify-between items-center">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-lg">{r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}</span>
-                    <span className="text-sm text-slate-600">{r.quantity} kantong · {r.component}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      r.urgency === "CRITICAL" ? "bg-red-100 text-red-700" :
-                      r.urgency === "URGENT" ? "bg-orange-100 text-orange-700" :
-                      "bg-slate-100 text-slate-600"
-                    }`}>{r.urgency}</span>
+              <div key={r.id}
+                className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 text-white rounded-xl flex items-center justify-center font-bold shadow-sm">
+                    {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {r.proximity} · {r.patient?.user?.city ?? r.hospital?.hospitalName ?? "-"}
-                  </p>
-                  {r.reason && <p className="text-xs text-slate-600 mt-1 italic">"{r.reason}"</p>}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold">{r.quantity} kantong · {r.component}</p>
+                      <Badge status={r.urgency} />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      📍 {r.proximity} · {r.patient?.user?.city ?? r.hospital?.hospitalName ?? "-"}
+                    </p>
+                    {r.reason && <p className="text-xs text-slate-600 mt-1 italic">"{r.reason}"</p>}
+                  </div>
                 </div>
                 {me.isEligible ? (
-                  <button onClick={() => volunteer(r.id)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-sm">
-                    Bersedia
-                  </button>
+                  <Button size="sm" icon={<Icons.Heart />} onClick={() => volunteer(r.id)}>Bersedia</Button>
                 ) : (
-                  <span className="text-xs text-slate-400 italic">Eligible dulu untuk volunteer</span>
+                  <span className="text-xs text-slate-400 italic">Eligible dulu</span>
                 )}
               </div>
             ))}
           </div>
         )}
-      </section>
+      </Card>
 
       {/* Riwayat */}
-      <section className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-3">Riwayat Donor</h2>
+      <Card title="Riwayat Donor" icon={<Icons.Calendar />}>
         {history.length === 0 ? (
-          <p className="text-slate-500 text-sm">Belum ada riwayat.</p>
+          <EmptyState icon="📋"
+            title="Belum ada riwayat donor"
+            description="Riwayat akan otomatis terisi setelah Anda menyelesaikan donor pertama." />
         ) : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-slate-500"><th>Tanggal</th><th>Lokasi</th><th>Komponen</th><th>Volume</th></tr></thead>
-            <tbody>
-              {history.map((h: any) => (
-                <tr key={h.id} className="border-t">
-                  <td>{new Date(h.donationDate).toLocaleDateString("id-ID")}</td>
-                  <td>{h.location}</td>
-                  <td>{h.component}</td>
-                  <td>{h.volumeMl} mL</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
+                  <th className="py-2">Tanggal</th><th>Lokasi</th><th>Komponen</th><th>Volume</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((h: any) => (
+                  <tr key={h.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="py-2.5">{new Date(h.donationDate).toLocaleDateString("id-ID", { dateStyle: "medium" })}</td>
+                    <td>{h.location}</td>
+                    <td>{h.component}</td>
+                    <td className="font-medium">{h.volumeMl} mL</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+      </Card>
     </main>
   );
 }
@@ -263,15 +288,29 @@ function StepCard({ step, title, status, desc, href, action }: {
   step: number; title: string; status: "done" | "todo" | "warning";
   desc: string; href?: string; action?: React.ReactNode;
 }) {
-  const icon = status === "done" ? "✅" : status === "warning" ? "⚠️" : "⭕";
+  const statusConfig = {
+    done: { icon: "✅", bg: "bg-emerald-50", border: "border-emerald-300", iconBg: "bg-emerald-500", label: "Selesai" },
+    warning: { icon: "⚠️", bg: "bg-amber-50", border: "border-amber-300", iconBg: "bg-amber-500", label: "Perlu Action" },
+    todo: { icon: "⭕", bg: "bg-white", border: "border-slate-200", iconBg: "bg-slate-300", label: "Belum" },
+  };
+  const cfg = statusConfig[status];
+
   const card = (
-    <div className="bg-white p-5 rounded-lg shadow hover:shadow-md transition">
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <span>Step {step}</span> {icon}
+    <div className={`${cfg.bg} ${cfg.border} border-2 p-5 rounded-xl shadow-sm hover:shadow-md transition cursor-pointer relative overflow-hidden group h-full`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className={`${cfg.iconBg} text-white text-xs font-bold px-2 py-0.5 rounded-full`}>
+          STEP {step}
+        </span>
+        <span className="text-2xl">{cfg.icon}</span>
       </div>
-      <h3 className="font-semibold mt-1">{title}</h3>
-      <p className="text-xs text-slate-600 mt-1">{desc}</p>
+      <h3 className="font-bold text-slate-900 mb-1">{title}</h3>
+      <p className="text-xs text-slate-600 leading-relaxed">{desc}</p>
       {action && <div className="mt-3">{action}</div>}
+      {href && (
+        <div className="absolute bottom-3 right-3 text-slate-400 group-hover:text-red-600 group-hover:translate-x-1 transition">
+          →
+        </div>
+      )}
     </div>
   );
   return href ? <Link href={href}>{card}</Link> : card;
