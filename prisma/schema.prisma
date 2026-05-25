@@ -112,6 +112,8 @@ model User {
   phoneNum    String
   address     String?
   city        String
+  province    String?       // Provinsi (untuk matching loose)
+  zone        String?       // Regional zone (Jabodetabek, Bandung Raya, dll)
   birthDate   DateTime?     // wajib untuk validasi usia donor (17-65)
   role        Role
   isBlocked   Boolean  @default(false)
@@ -125,6 +127,8 @@ model User {
   auditLogs   AuditLog[]
 
   @@index([city])
+  @@index([province])
+  @@index([zone])
   @@index([role])
 }
 
