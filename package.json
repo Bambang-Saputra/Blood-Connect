@@ -13,6 +13,7 @@
     "prisma:studio": "prisma studio",
     "admin:create": "tsx scripts/createAdmin.ts",
     "seed": "tsx scripts/seed.ts",
+    "backfill:regions": "tsx scripts/backfillRegions.ts",
     "job:expiry": "tsx src/jobs/stockExpiryJob.ts"
   },
   "dependencies": {
