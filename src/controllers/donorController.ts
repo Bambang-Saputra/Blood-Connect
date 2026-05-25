@@ -126,6 +126,114 @@ export async function respondNotification(req: AuthedRequest, res: Response) {
   return res.json({ message: "Respons tercatat" });
 }
 
+// =====================================================================
+// GET /api/donor/open-requests
+// Browse semua request darah yang masih butuh donor — proaktif
+// =====================================================================
+export async function listOpenRequests(req: AuthedRequest, res: Response) {
+  const donor = await prisma.pendonor.findUnique({
+    where: { userId: req.user!.id },
+    include: { user: true },
+  });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  // Pasien yang bisa diterima darah donor (recipient → donor compatibility reverse)
+  // Donor O+ bisa donor ke: O+, A+, B+, AB+
+  // Donor O- bisa donor ke: semua
+  // Untuk simplicity, kita tampilkan request yang golongannya SAMA atau donor bisa donor ke-nya
+  const COMPAT_DONOR_TO_RECIPIENT: Record<string, string[]> = {
+    "O-":  ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"],
+    "O+":  ["O+", "A+", "B+", "AB+"],
+    "A-":  ["A-", "A+", "AB-", "AB+"],
+    "A+":  ["A+", "AB+"],
+    "B-":  ["B-", "B+", "AB-", "AB+"],
+    "B+":  ["B+", "AB+"],
+    "AB-": ["AB-", "AB+"],
+    "AB+": ["AB+"],
+  };
+  const donorKey = `${donor.bloodType}${donor.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  const compatibleRecipients = COMPAT_DONOR_TO_RECIPIENT[donorKey] ?? [donorKey];
+
+  const recipientFilters = compatibleRecipients.map((k) => ({
+    bloodType: k.replace(/[+-]$/, "") as any,
+    rhesusType: (k.endsWith("+") ? "POSITIVE" : "NEGATIVE") as any,
+  }));
+
+  const requests = await prisma.permintaanDonor.findMany({
+    where: {
+      reqStatus: { in: ["PENDING", "MATCHED_DONOR"] },
+      OR: recipientFilters,
+    },
+    include: {
+      patient: { include: { user: { select: { name: true, city: true, province: true, zone: true } } } },
+      hospital: { select: { hospitalName: true, hospitalLoc: true } },
+    },
+    orderBy: [{ urgency: "desc" }, { createdAt: "desc" }],
+    take: 30,
+  });
+
+  // Hitung "kedekatan" sederhana untuk sorting client-side
+  const withProximity = requests.map((r) => {
+    const reqCity = r.patient?.user?.city ?? null;
+    const reqProvince = r.patient?.user?.province ?? null;
+    const reqZone = r.patient?.user?.zone ?? null;
+    let proximity = "Jauh";
+    if (reqCity && reqCity === donor.user.city) proximity = "Sangat dekat (kota sama)";
+    else if (reqZone && reqZone === donor.user.zone) proximity = "Dekat (zona sama)";
+    else if (reqProvince && reqProvince === donor.user.province) proximity = "Sedang (provinsi sama)";
+    return { ...r, proximity };
+  });
+
+  return res.json({ data: withProximity, donorBloodType: donorKey });
+}
+
+// POST /api/donor/volunteer/:requestId
+// Donor proaktif menyatakan kesediaan untuk request yang belum ditargetkan ke dia
+export async function volunteerForRequest(req: AuthedRequest, res: Response) {
+  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+  if (!donor.isEligible) {
+    return res.status(400).json({ error: "Anda belum eligible. Lakukan checkEligible dulu." });
+  }
+
+  const request = await prisma.permintaanDonor.findUnique({
+    where: { id: req.params.requestId },
+    include: { patient: true },
+  });
+  if (!request) return res.status(404).json({ error: "Request tidak ditemukan" });
+
+  // Cek apakah sudah ada notification (jangan duplicate)
+  const existing = await prisma.donorNotification.findUnique({
+    where: { donorId_requestId: { donorId: donor.id, requestId: request.id } },
+  });
+  if (existing) {
+    return res.status(400).json({ error: "Anda sudah merespons request ini" });
+  }
+
+  await prisma.donorNotification.create({
+    data: {
+      donorId: donor.id,
+      requestId: request.id,
+      responded: true,
+      accepted: true,
+      respondedAt: new Date(),
+    },
+  });
+
+  // Notifikasi pasien
+  if (request.patient) {
+    await notifyUser({
+      userId: request.patient.userId,
+      type: NotificationType.REQUEST_STATUS_UPDATE,
+      title: "Ada Pendonor Sukarela!",
+      body: "Seorang pendonor secara sukarela menawarkan diri untuk membantu permintaan Anda.",
+      meta: { requestId: request.id, donorId: donor.id },
+    });
+  }
+
+  return res.json({ message: "Terima kasih atas kesediaan Anda! Tim medis akan menghubungi." });
+}
+
 // Info pendonor saat ini (dashboard banner)
 export async function getMe(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({
