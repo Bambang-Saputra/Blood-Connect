@@ -2,4 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --brand: #c1121f; }
+:root {
+  --brand: #c1121f;
+}
+
+/* Smooth scroll untuk anchor link (#cara-kerja, #fitur, dst) */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px; /* offset untuk sticky header */
+}
+
+/* Custom scrollbar — minimal & elegan */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #fef2f2;
+}
+::-webkit-scrollbar-thumb {
+  background: #fca5a5;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
+}
+
+/* Selection color */
+::selection {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+/* Subtle pulse animation untuk hero badge */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-soft-pulse {
+  animation: soft-pulse 2s ease-in-out infinite;
+}
