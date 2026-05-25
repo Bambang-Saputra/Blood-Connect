@@ -216,21 +216,46 @@ export async function matchDonorToRequest(requestId: string): Promise<MatchResul
   });
   if (!request) throw new Error("Request tidak ditemukan");
 
-  const targetCity = request.patient?.user?.city ?? request.hospital?.user?.city ?? null;
+  const targetUser = request.patient?.user ?? request.hospital?.user;
+  const targetCity = targetUser?.city ?? null;
+  const targetProvince = targetUser?.province ?? null;
+  const targetZone = targetUser?.zone ?? null;
   const compatPairs = compatiblePairs(request.bloodType, request.rhesusType);
 
-  // [2.1] Filter pendonor: golongan kompatibel + eligible + aktif + (lokasi sama jika ada)
-  const candidates = await prisma.pendonor.findMany({
-    where: {
-      isEligible: true,
-      isActive: true,
-      OR: compatPairs.map((p) => ({ bloodType: p.bloodType, rhesusType: p.rhesusType })),
-      ...(targetCity && { user: { city: targetCity } }),
-    },
-    include: { user: true },
-    take: 50, // batasi blast notifikasi
-    orderBy: { lastDonationDate: "asc" }, // pendonor yang paling lama tidak donor → prioritas
-  });
+  // [2.1] Tiered location matching:
+  //   Tier 1: SAME CITY (paling dekat)
+  //   Tier 2: SAME ZONE (region terdekat — Jabodetabek, Bandung Raya, dll)
+  //   Tier 3: SAME PROVINCE
+  //   Tier 4: ANY (kalau urgent / fallback)
+  // Cari secara berurutan, berhenti saat dapat >=10 kandidat
+  const baseFilter = {
+    isEligible: true,
+    isActive: true,
+    OR: compatPairs.map((p) => ({ bloodType: p.bloodType, rhesusType: p.rhesusType })),
+  };
+
+  const tiers: { name: string; locationFilter: any }[] = [
+    ...(targetCity ? [{ name: "city", locationFilter: { user: { city: targetCity } } }] : []),
+    ...(targetZone ? [{ name: "zone", locationFilter: { user: { zone: targetZone } } }] : []),
+    ...(targetProvince ? [{ name: "province", locationFilter: { user: { province: targetProvince } } }] : []),
+    { name: "any", locationFilter: {} }, // fallback nasional
+  ];
+
+  let candidates: any[] = [];
+  let matchedTier = "any";
+  for (const tier of tiers) {
+    candidates = await prisma.pendonor.findMany({
+      where: { ...baseFilter, ...tier.locationFilter },
+      include: { user: true },
+      take: 50,
+      orderBy: { lastDonationDate: "asc" },
+    });
+    if (candidates.length >= 10) {
+      matchedTier = tier.name;
+      break;
+    }
+    if (candidates.length > 0) matchedTier = tier.name;
+  }
 
   if (candidates.length === 0) {
     // Tidak ada — biarkan PENDING, admin perlu eskalasi manual
@@ -275,6 +300,6 @@ export async function matchDonorToRequest(requestId: string): Promise<MatchResul
     status: RequestStatus.MATCHED_DONOR,
     source: "DONOR",
     notifiedDonors: candidates.map((c) => c.id),
-    message: `${candidates.length} pendonor eligible telah dinotifikasi`,
+    message: `${candidates.length} pendonor eligible telah dinotifikasi (radius: ${matchedTier})`,
   };
 }
