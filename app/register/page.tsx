@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, setToken, dashboardPath } from "../lib/api";
+import { RegionPicker } from "../lib/RegionPicker";
 
 /**
  * Halaman Register multi-role
@@ -18,7 +19,8 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     role: "PENDONOR",
-    email: "", password: "", name: "", phoneNum: "", city: "", address: "",
+    email: "", password: "", name: "", phoneNum: "",
+    province: "", city: "", zone: "", address: "",
     birthDate: "",
     bloodType: "O", rhesusType: "POSITIVE",
     hospitalName: "", hospitalCode: "", hospitalLoc: "",
@@ -97,8 +99,16 @@ export default function RegisterPage() {
             <Input label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} required />
             <Input label="Password" type="password" value={form.password} onChange={(v) => update("password", v)} required minLength={8} />
             <Input label="No HP" value={form.phoneNum} onChange={(v) => update("phoneNum", v)} required />
-            <Input label="Kota" value={form.city} onChange={(v) => update("city", v)} required />
-            <Input label="Alamat (opsional)" value={form.address} onChange={(v) => update("address", v)} />
+            <RegionPicker
+              province={form.province} city={form.city}
+              onChange={({ province, city, zone }) => {
+                setForm((f) => ({ ...f, province, city, zone }));
+              }}
+              required
+            />
+            <div className="md:col-span-2">
+              <Input label="Alamat (opsional)" value={form.address} onChange={(v) => update("address", v)} />
+            </div>
             {!isHospital && (
               <div className="md:col-span-2">
                 <Input label="Tanggal Lahir (wajib untuk pendonor)" type="date" value={form.birthDate} onChange={(v) => update("birthDate", v)} required={!isHospital} />

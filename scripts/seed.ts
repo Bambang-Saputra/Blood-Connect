@@ -34,7 +34,7 @@ async function main() {
   // ===== ADMIN =====
   const admin = await upsertUser({
     email: "admin@bloodconnect.id", name: "Super Admin",
-    password: "admin12345", phoneNum: "021555000", city: "Jakarta", role: "ADMIN",
+    password: "admin12345", phoneNum: "021555000", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "ADMIN",
   });
   console.log(`✅ Admin: ${admin.email} / admin12345`);
 
@@ -42,7 +42,7 @@ async function main() {
   const rsVerified = await upsertUser(
     {
       email: "rscm@test.com", name: "RSCM Admin", password: "password123",
-      phoneNum: "021555111", city: "Jakarta", role: "RUMAH_SAKIT",
+      phoneNum: "021555111", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "RUMAH_SAKIT",
     },
     {
       rumahSakit: {
@@ -61,7 +61,7 @@ async function main() {
   const rsUnverified = await upsertUser(
     {
       email: "rsfm@test.com", name: "RS Fatmawati", password: "password123",
-      phoneNum: "021555222", city: "Jakarta", role: "RUMAH_SAKIT",
+      phoneNum: "021555222", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "RUMAH_SAKIT",
     },
     {
       rumahSakit: {
@@ -80,7 +80,7 @@ async function main() {
   const donor1 = await upsertUser(
     {
       email: "donor1@test.com", name: "Budi Donor", password: "password123",
-      phoneNum: "081234567001", city: "Jakarta", role: "PENDONOR",
+      phoneNum: "081234567001", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "PENDONOR",
       birthDate: new Date("1995-05-15"),
     },
     { pendonor: { create: { bloodType: "O", rhesusType: "POSITIVE" } } }
@@ -90,7 +90,7 @@ async function main() {
   const donor2 = await upsertUser(
     {
       email: "donor2@test.com", name: "Siti Donor", password: "password123",
-      phoneNum: "081234567002", city: "Jakarta", role: "PENDONOR",
+      phoneNum: "081234567002", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "PENDONOR",
       birthDate: new Date("1998-08-20"),
     },
     { pendonor: { create: { bloodType: "A", rhesusType: "POSITIVE" } } }
@@ -100,7 +100,7 @@ async function main() {
   const donor3 = await upsertUser(
     {
       email: "donor3@test.com", name: "Andi Donor", password: "password123",
-      phoneNum: "081234567003", city: "Surabaya", role: "PENDONOR",
+      phoneNum: "081234567003", city: "Surabaya", province: "Jawa Timur", zone: "Gerbangkertosusila", role: "PENDONOR",
       birthDate: new Date("2000-01-10"),
     },
     { pendonor: { create: { bloodType: "B", rhesusType: "NEGATIVE" } } }
@@ -111,7 +111,7 @@ async function main() {
   const patient1 = await upsertUser(
     {
       email: "pasien1@test.com", name: "Ani Pasien", password: "password123",
-      phoneNum: "081234567101", city: "Jakarta", role: "PASIEN",
+      phoneNum: "081234567101", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "PASIEN",
       birthDate: new Date("1985-03-20"),
     },
     { pasien: { create: {} } }
@@ -121,7 +121,7 @@ async function main() {
   const patient2 = await upsertUser(
     {
       email: "pasien2@test.com", name: "Doni Pasien", password: "password123",
-      phoneNum: "081234567102", city: "Jakarta", role: "PASIEN",
+      phoneNum: "081234567102", city: "Jakarta", province: "DKI Jakarta", zone: "Jabodetabek", role: "PASIEN",
       birthDate: new Date("1990-07-12"),
     },
     { pasien: { create: {} } }
