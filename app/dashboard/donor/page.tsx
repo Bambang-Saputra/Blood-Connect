@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
+import { toast } from "../../lib/toast";
+import { NotificationBell } from "../../lib/NotificationBell";
+import { ModeSwitcher } from "../../lib/ModeSwitcher";
 
 /**
  * DASHBOARD: PENDONOR (medical workflow)
@@ -32,19 +35,30 @@ export default function DonorDashboard() {
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [openRequests, setOpenRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
-    const [meRes, notifRes, histRes] = await Promise.all([
+    const [meRes, notifRes, histRes, openRes] = await Promise.all([
       api("/donor/me").then((r) => r.json()).catch(() => null),
       api("/donor/notifications").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/donor/history").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/donor/open-requests").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     setMe(meRes);
     setNotifs(notifRes.data ?? []);
     setHistory(histRes.data ?? []);
+    setOpenRequests(openRes.data ?? []);
+  }
+
+  async function volunteer(requestId: string) {
+    if (!confirm("Anda yakin bersedia mendonor untuk request ini?")) return;
+    const res = await api(`/donor/volunteer/${requestId}`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) { toast.success(data.message); refresh(); }
+    else toast.error(data.error ?? "Gagal volunteer");
   }
 
   async function handleCheckEligible() {
@@ -76,12 +90,19 @@ export default function DonorDashboard() {
             Golongan: {me.bloodType}{me.rhesusType === "POSITIVE" ? "+" : "-"} · Kota: {me.user.city}
           </p>
         </div>
-        <button
-          onClick={() => { clearToken(); location.href = "/"; }}
-          className="text-sm text-slate-500 hover:text-red-600"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-3">
+          <ModeSwitcher currentRole="PENDONOR" />
+          <NotificationBell />
+          <Link href="/dashboard/profile" className="text-sm text-slate-600 hover:text-red-600">
+            Profil
+          </Link>
+          <button
+            onClick={() => { clearToken(); location.href = "/"; }}
+            className="text-sm text-slate-500 hover:text-red-600"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Status Banner */}
@@ -141,11 +162,12 @@ export default function DonorDashboard() {
         </div>
       )}
 
-      {/* Notifikasi MatchSystem */}
+      {/* Notifikasi MatchSystem (yang di-tag khusus) */}
       <section className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-3">Permintaan Darah untuk Anda ({notifs.length})</h2>
+        <h2 className="text-xl font-semibold mb-1">📩 Permintaan untuk Anda ({notifs.length})</h2>
+        <p className="text-xs text-slate-500 mb-3">MatchSystem secara khusus memanggil Anda berdasarkan kecocokan & lokasi</p>
         {notifs.length === 0 ? (
-          <p className="text-slate-500 text-sm">Belum ada permintaan saat ini.</p>
+          <p className="text-slate-500 text-sm">Belum ada permintaan personal saat ini. Cek "Permintaan Tersedia" di bawah untuk volunteer.</p>
         ) : (
           notifs.map((n) => (
             <div key={n.id} className="border p-4 rounded mb-2 flex justify-between items-center">
@@ -165,6 +187,50 @@ export default function DonorDashboard() {
               </div>
             </div>
           ))
+        )}
+      </section>
+
+      {/* Browse Open Requests — Proaktif */}
+      <section className="bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-1">🩸 Permintaan Tersedia ({openRequests.length})</h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Semua permintaan darah aktif yang kompatibel dengan golongan Anda. Anda bisa volunteer langsung walaupun tidak di-tag.
+        </p>
+        {openRequests.length === 0 ? (
+          <div className="text-center py-6 text-slate-400">
+            <p className="text-3xl mb-2">🎉</p>
+            <p className="text-sm">Tidak ada permintaan aktif saat ini.</p>
+            <p className="text-xs">Semua kebutuhan darah sudah terpenuhi dari stok rumah sakit.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {openRequests.map((r) => (
+              <div key={r.id} className="border p-3 rounded flex justify-between items-center">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-lg">{r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}</span>
+                    <span className="text-sm text-slate-600">{r.quantity} kantong · {r.component}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      r.urgency === "CRITICAL" ? "bg-red-100 text-red-700" :
+                      r.urgency === "URGENT" ? "bg-orange-100 text-orange-700" :
+                      "bg-slate-100 text-slate-600"
+                    }`}>{r.urgency}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {r.proximity} · {r.patient?.user?.city ?? r.hospital?.hospitalName ?? "-"}
+                  </p>
+                  {r.reason && <p className="text-xs text-slate-600 mt-1 italic">"{r.reason}"</p>}
+                </div>
+                {me.isEligible ? (
+                  <button onClick={() => volunteer(r.id)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-sm">
+                    Bersedia
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">Eligible dulu untuk volunteer</span>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </section>
 

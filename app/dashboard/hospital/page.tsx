@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { toast } from "../../lib/toast";
+import { NotificationBell } from "../../lib/NotificationBell";
 
 /**
  * DASHBOARD: RUMAH SAKIT
@@ -66,6 +68,8 @@ export default function HospitalDashboard() {
           <button onClick={() => setShowAddStock(!showAddStock)} className="text-sm bg-emerald-600 text-white px-3 py-1.5 rounded">
             {showAddStock ? "× Tutup" : "+ Tambah Stok"}
           </button>
+          <NotificationBell />
+          <Link href="/dashboard/profile" className="text-sm text-slate-600 hover:text-red-600">Profil</Link>
           <button onClick={() => { clearToken(); location.href = "/"; }}
             className="text-sm text-slate-500 hover:text-red-600">Logout</button>
         </div>
@@ -181,19 +185,27 @@ export default function HospitalDashboard() {
 function AddStockForm({ onCreated }: { onCreated: () => void }) {
   const [form, setForm] = useState({
     bloodType: "O", rhesusType: "POSITIVE", component: "WHOLE_BLOOD",
-    quantity: 10, expiryDate: "", location: "",
+    quantity: "10",          // STRING — biar input number tidak auto-prefix "0"
+    expiryDate: "", location: "",
     source: "",
   });
   const [submitting, setSubmitting] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    const qty = Number(form.quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast.error("Jumlah kantong harus angka positif");
+      return;
+    }
+
     setSubmitting(true);
     const res = await api("/stocks", {
       method: "POST",
       body: JSON.stringify({
         ...form,
-        quantity: Number(form.quantity),
+        quantity: qty,
         expiryDate: new Date(form.expiryDate).toISOString(),
       }),
     });
@@ -236,8 +248,19 @@ function AddStockForm({ onCreated }: { onCreated: () => void }) {
         </div>
         <div>
           <label className="block text-xs font-medium mb-1">Jumlah (kantong)</label>
-          <input type="number" min={1} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
-            className="w-full border px-2 py-1.5 rounded" required />
+          <input
+            type="number" min={1} step={1}
+            value={form.quantity}
+            onChange={(e) => {
+              // Buang leading zero kalau ada (kecuali kalau cuma "0" sebagai placeholder)
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setForm({ ...form, quantity: v });
+            }}
+            onFocus={(e) => e.target.select()}   // auto-select supaya user tinggal ketik ulang
+            className="w-full border px-2 py-1.5 rounded"
+            required
+            placeholder="10"
+          />
         </div>
         <div>
           <label className="block text-xs font-medium mb-1">Expiry Date</label>
