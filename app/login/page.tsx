@@ -82,11 +82,24 @@ export default function LoginPage() {
         </p>
 
         <div className="mt-6 pt-4 border-t border-slate-200">
-          <p className="text-xs text-slate-400 mb-2">Akun demo untuk testing:</p>
-          <div className="text-xs text-slate-600 space-y-1 font-mono">
-            <p>donor@test.com / password123</p>
-            <p>pasien@test.com / password123</p>
-            <p>rs@test.com / password123</p>
+          <p className="text-xs text-slate-400 mb-2">Akun demo (dari <code className="bg-slate-100 px-1 rounded">npm run seed</code>) — klik untuk auto-isi:</p>
+          <div className="space-y-1.5">
+            {[
+              { role: "Admin", email: "admin@bloodconnect.id", pw: "admin12345", color: "bg-red-50 hover:bg-red-100 text-red-700 border-red-200" },
+              { role: "Rumah Sakit", email: "rscm@test.com", pw: "password123", color: "bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200" },
+              { role: "Pendonor (eligible)", email: "donor1@test.com", pw: "password123", color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200" },
+              { role: "Pasien", email: "pasien1@test.com", pw: "password123", color: "bg-green-50 hover:bg-green-100 text-green-700 border-green-200" },
+            ].map((acc) => (
+              <button
+                key={acc.email}
+                type="button"
+                onClick={() => { setEmail(acc.email); setPassword(acc.pw); }}
+                className={`w-full text-left text-xs ${acc.color} border px-2 py-1.5 rounded font-mono transition flex justify-between items-center`}
+              >
+                <span className="font-sans font-semibold not-italic">{acc.role}</span>
+                <span className="opacity-80">{acc.email}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

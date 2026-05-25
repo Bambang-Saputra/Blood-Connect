@@ -182,7 +182,16 @@ function Field({ label, hint, value, onChange, type, step }: {
       <label className="block text-xs font-medium mb-1">{label}</label>
       <input
         type={type} step={step} value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          // Untuk type=number, strip leading zero supaya "0123" → "123"
+          if (type === "number" && !step) {
+            const v = e.target.value.replace(/^0+(?=\d)/, "");
+            onChange(v);
+          } else {
+            onChange(e.target.value);
+          }
+        }}
+        onFocus={(e) => type === "number" && e.target.select()}
         className="w-full border px-2 py-1.5 rounded text-sm"
         required
       />

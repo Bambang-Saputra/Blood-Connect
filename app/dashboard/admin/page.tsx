@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { toast } from "../../lib/toast";
+import { NotificationBell } from "../../lib/NotificationBell";
 
 /**
  * DASHBOARD: ADMIN
@@ -67,7 +69,11 @@ export default function AdminDashboard() {
     <main className="max-w-7xl mx-auto p-8 space-y-6">
       <header className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Dashboard Admin</h1>
-        <button onClick={() => { clearToken(); location.href = "/"; }} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
+        <div className="flex items-center gap-3">
+          <NotificationBell />
+          <Link href="/dashboard/profile" className="text-sm text-slate-600 hover:text-red-600">Profil</Link>
+          <button onClick={() => { clearToken(); location.href = "/"; }} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
+        </div>
       </header>
 
       {/* === Statistik Cepat === */}

@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { toast } from "../../lib/toast";
+import { NotificationBell } from "../../lib/NotificationBell";
+import { ModeSwitcher } from "../../lib/ModeSwitcher";
 
 /**
  * ============================================================
@@ -17,7 +20,7 @@ import { toast } from "../../lib/toast";
 
 export default function PatientDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
-  const [form, setForm] = useState({ bloodType: "O", rhesusType: "POSITIVE", quantity: 1, urgency: "NORMAL" });
+  const [form, setForm] = useState({ bloodType: "O", rhesusType: "POSITIVE", quantity: "1", urgency: "NORMAL" });
 
   useEffect(() => { refresh(); }, []);
   async function refresh() {
@@ -28,9 +31,14 @@ export default function PatientDashboard() {
   // [Use Case REQUEST — Activity Diagram #9]
   async function submitRequest(e: React.FormEvent) {
     e.preventDefault();
+    const qty = Number(form.quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast.error("Jumlah kantong harus angka positif");
+      return;
+    }
     const res = await api("/requests", {
       method: "POST",
-      body: JSON.stringify({ ...form, quantity: Number(form.quantity) }),
+      body: JSON.stringify({ ...form, quantity: qty }),
     });
     if (res.ok) { toast.success("Permintaan dikirim. MatchSystem memproses..."); refresh(); }
     else toast.error((await res.json()).error ?? "Gagal mengirim permintaan");
@@ -40,12 +48,17 @@ export default function PatientDashboard() {
     <main className="max-w-5xl mx-auto p-8 space-y-8">
       <header className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Dashboard Pasien</h1>
-        <button
-          onClick={() => { clearToken(); location.href = "/"; }}
-          className="text-sm text-slate-500 hover:text-red-600"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-3">
+          <ModeSwitcher currentRole="PASIEN" />
+          <NotificationBell />
+          <Link href="/dashboard/profile" className="text-sm text-slate-600 hover:text-red-600">Profil</Link>
+          <button
+            onClick={() => { clearToken(); location.href = "/"; }}
+            className="text-sm text-slate-500 hover:text-red-600"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* === Form Request Darah === */}
@@ -59,9 +72,15 @@ export default function PatientDashboard() {
             <option value="POSITIVE">Rh+</option><option value="NEGATIVE">Rh-</option>
           </select>
           <input
-            type="number" min={1} value={form.quantity}
-            onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
-            className="border px-2 py-2 rounded" placeholder="Qty kantong"
+            type="number" min={1} step={1}
+            value={form.quantity}
+            onChange={(e) => {
+              const v = e.target.value.replace(/^0+(?=\d)/, "");
+              setForm({ ...form, quantity: v });
+            }}
+            onFocus={(e) => e.target.select()}
+            className="border px-2 py-2 rounded"
+            placeholder="Qty kantong"
           />
           <select value={form.urgency} onChange={(e) => setForm({ ...form, urgency: e.target.value })} className="border px-2 py-2 rounded">
             <option>NORMAL</option><option>URGENT</option><option>CRITICAL</option>
