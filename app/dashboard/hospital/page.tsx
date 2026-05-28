@@ -55,6 +55,7 @@ export default function HospitalDashboard() {
 
   const totalAvailable = stocks.filter((s) => s.status === "AVAILABLE").reduce((sum, s) => sum + s.quantity, 0);
   const totalQuarantine = stocks.filter((s) => s.status === "QUARANTINE").reduce((sum, s) => sum + s.quantity, 0);
+  const activeRequestsCount = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus)).length;
 
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8 space-y-6">
@@ -87,7 +88,7 @@ export default function HospitalDashboard() {
         <StatCard icon="🩸" label="Total Batch" value={stocks.length} gradient="from-red-500 to-rose-600" />
         <StatCard icon="✅" label="Available" value={totalAvailable} gradient="from-emerald-500 to-green-600" />
         <StatCard icon="🧪" label="Quarantine" value={totalQuarantine} gradient="from-amber-500 to-yellow-600" />
-        <StatCard icon="📋" label="Permintaan" value={requests.length} gradient="from-blue-500 to-indigo-600" />
+        <StatCard icon="📋" label="Permintaan Aktif" value={activeRequestsCount} gradient="from-blue-500 to-indigo-600" />
       </section>
 
       {/* Form Tambah Stok */}

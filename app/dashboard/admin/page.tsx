@@ -16,18 +16,20 @@ export default function AdminDashboard() {
   const [quarantineStocks, setQuarantineStocks] = useState<any[]>([]);
   const [pendingSchedules, setPendingSchedules] = useState<any[]>([]);
   const [stuckRequests, setStuckRequests] = useState<any[]>([]);
+  const [liveRequests, setLiveRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
     setLoading(true);
-    const [hUnverified, hVerified, q, s, r] = await Promise.all([
+    const [hUnverified, hVerified, q, s, r, allReq] = await Promise.all([
       api("/admin/hospitals?status=UNVERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/hospitals?status=VERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/stocks/quarantine").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/schedules?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/requests?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/admin/requests").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     
     setUnverifiedHospitals(hUnverified.data ?? []);
@@ -35,6 +37,7 @@ export default function AdminDashboard() {
     setQuarantineStocks(q.data ?? []);
     setPendingSchedules(s.data ?? []);
     setStuckRequests(r.data ?? []);
+    setLiveRequests(allReq.data ?? []);
     setLoading(false);
   }
 
@@ -275,7 +278,7 @@ export default function AdminDashboard() {
 
       {/* 7. Live Feed Permintaan Darah */}
       <Card title="Live Feed Permintaan Darah" subtitle="Pantau antrean request dari seluruh rumah sakit secara real-time" icon={<Icons.Refresh />}>
-        {loading ? <LoadingRows /> : stuckRequests.length === 0 ? (
+        {loading ? <LoadingRows /> : liveRequests.length === 0 ? (
            <EmptyState icon="📡" title="Sistem Tenang" description="Belum ada aktivitas request terbaru." />
         ) : (
           <div className="overflow-x-auto">
@@ -289,7 +292,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {stuckRequests.slice(0, 5).map((req) => (
+                {liveRequests.slice(0, 5).map((req) => (
                   <tr key={req.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-4 py-3">
                       <div className="font-mono text-xs text-slate-400">#{req.id.slice(0,8)}</div>
