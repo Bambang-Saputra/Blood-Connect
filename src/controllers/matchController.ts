@@ -99,6 +99,9 @@ export async function triggerMatch(req: AuthedRequest, res: Response) {
 // =====================================================================
 // 3a) GET /api/requests?mine=true — list semua request milik user yang login
 // =====================================================================
+// =====================================================================
+// 3a) GET /api/requests?mine=true — list semua request atau request RS
+// =====================================================================
 export async function listMyRequests(req: AuthedRequest, res: Response) {
   const profile = await prisma.user.findUnique({
     where: { id: req.user!.id },
@@ -106,16 +109,38 @@ export async function listMyRequests(req: AuthedRequest, res: Response) {
   });
   if (!profile) return res.status(404).json({ error: "User tidak ditemukan" });
 
-  const data = await prisma.permintaanDonor.findMany({
-    where: {
+  const isMineOnly = req.query.mine === "true";
+  let whereClause: Prisma.PermintaanDonorWhereInput = {};
+
+  if (profile.rumahSakit && !isMineOnly) {
+    // Mode RS: Lihat request buatan sendiri ATAU request dari pasien mandiri
+    whereClause = {
+      OR: [
+        { hospitalId: profile.rumahSakit.id },
+        { hospitalId: null },
+      ],
+    };
+  } else {
+    // Mode "Mine": Pasien murni cuma lihat miliknya, RS lihat miliknya
+    whereClause = {
       OR: [
         ...(profile.pasien ? [{ patientId: profile.pasien.id }] : []),
         ...(profile.rumahSakit ? [{ hospitalId: profile.rumahSakit.id }] : []),
       ],
-    },
+    };
+  }
+
+  const data = await prisma.permintaanDonor.findMany({
+    where: whereClause,
     orderBy: { createdAt: "desc" },
     take: 50,
+    include: {
+      // Tambahkan include ini agar RS bisa melihat nama pasiennya
+      patient: { include: { user: { select: { name: true, city: true } } } },
+      hospital: { select: { hospitalName: true } },
+    }
   });
+  
   return res.json({ data });
 }
 
