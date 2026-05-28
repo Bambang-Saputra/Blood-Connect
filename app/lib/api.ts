@@ -40,7 +40,8 @@ export function dashboardPath(role: string) {
   switch (role) {
     case "PENDONOR": return "/dashboard/donor";
     case "PASIEN": return "/dashboard/patient";
-    case "RUMAH_SAKIT": return "/dashboard/hospital";
+    case "PMI": return "/dashboard/hospital";        // URL legacy untuk PMI dashboard
+    case "RUMAH_SAKIT": return "/dashboard/hospital";  // backward compat
     case "ADMIN": return "/dashboard/admin";
     default: return "/";
   }

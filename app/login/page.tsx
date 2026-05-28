@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -108,13 +109,19 @@ export default function LoginPage() {
             </FormField>
 
             <FormField label="Password">
-              <input
-                type="password" required value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"} required value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border border-slate-300 px-4 py-2.5 pr-12 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm">
+                  {showPassword ? "🙈" : "👁"}
+                </button>
+              </div>
             </FormField>
 
             {error && (
@@ -144,7 +151,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { role: "Admin", email: "admin@bloodconnect.id", pw: "admin12345", emoji: "🛡️", color: "from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 text-red-700 border-red-200" },
-                { role: "Rumah Sakit", email: "rscm@test.com", pw: "password123", emoji: "🏥", color: "from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 text-orange-700 border-orange-200" },
+                { role: "PMI", email: "pmi-jakarta@test.com", pw: "password123", emoji: "🩸", color: "from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 text-orange-700 border-orange-200" },
                 { role: "Pendonor", email: "donor1@test.com", pw: "password123", emoji: "💉", color: "from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 text-blue-700 border-blue-200" },
                 { role: "Pasien", email: "pasien1@test.com", pw: "password123", emoji: "🩺", color: "from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 text-green-700 border-green-200" },
               ].map((acc) => (

@@ -8,72 +8,84 @@ import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
 /**
- * DASHBOARD: RUMAH SAKIT
+ * DASHBOARD: PMI (Palang Merah Indonesia / UTD)
  */
 
-type Req = {
-  id: string; bloodType: string; rhesusType: string;
-  quantity: number; reqStatus: string; urgency: string;
-  createdAt: string;
-};
-
-type Stock = {
-  id: string;
-  bloodType: string; rhesusType: string; component: string;
-  quantity: number; expiryDate: string; location: string;
-  status: string;
-};
-
-export default function HospitalDashboard() {
-  const [requests, setRequests] = useState<Req[]>([]);
-  const [stocks, setStocks] = useState<Stock[]>([]);
+export default function PmiDashboard() {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [stocks, setStocks] = useState<any[]>([]);
+  const [donors, setDonors] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddStock, setShowAddStock] = useState(false);
+  const [selectedDonorId, setSelectedDonorId] = useState("");
+  const [donorSearch, setDonorSearch] = useState("");
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
     setLoading(true);
-    const [r, s] = await Promise.all([
+    const [r, s, d, sc] = await Promise.all([
       api("/requests").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/stocks/mine").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/pmi/donors").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/pmi/schedules").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     setRequests(r.data ?? []);
     setStocks(s.data ?? []);
+    setDonors(d.data ?? []);
+    setSchedules(sc.data ?? []);
     setLoading(false);
   }
 
-  async function updateStatus(id: string, newStatus: string) {
-    if (!confirm(`Yakin ubah status ke ${newStatus}?`)) return;
+  async function accRequest(id: string) {
+    if (!confirm("ACC permintaan ini? Stok akan dialokasikan otomatis.")) return;
+    const res = await api(`/pmi/requests/${id}/acc`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) { toast.success("Request ACC, stok dialokasikan"); refresh(); }
+    else toast.error(data.error ?? "Gagal ACC");
+  }
+
+  async function updateRequestStatus(id: string, newStatus: string) {
+    if (!confirm(`Update status ke ${newStatus}?`)) return;
     const res = await api(`/requests/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ newStatus }),
     });
-    if (res.ok) { toast.success(`Status diperbarui ke ${newStatus}`); refresh(); }
-    else toast.error("Gagal update status");
+    if (res.ok) { toast.success(`Status: ${newStatus}`); refresh(); }
+    else toast.error("Gagal update");
+  }
+
+  async function broadcastBlood(bt: string, rh: string) {
+    if (!confirm(`Broadcast minta donor ${bt}${rh === "POSITIVE" ? "+" : "-"} ke semua pendonor terdaftar?`)) return;
+    const res = await api("/pmi/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ bloodType: bt, rhesusType: rh, urgencyLevel: "URGENT" }),
+    });
+    const data = await res.json();
+    if (res.ok) toast.success(`Broadcast ke ${data.notifiedCount} pendonor`);
+    else toast.error(data.error ?? "Gagal broadcast");
   }
 
   const totalAvailable = stocks.filter((s) => s.status === "AVAILABLE").reduce((sum, s) => sum + s.quantity, 0);
-  const totalQuarantine = stocks.filter((s) => s.status === "QUARANTINE").reduce((sum, s) => sum + s.quantity, 0);
-  const activeRequestsCount = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus)).length;
+  const pendingReqs = requests.filter((r) => r.reqStatus === "PENDING");
+  const accReqs = requests.filter((r) => ["ACC", "SHIPPED", "DELIVERED"].includes(r.reqStatus));
+
+  const filteredDonors = donors.filter((d) => {
+    const q = donorSearch.toLowerCase();
+    return !q || d.user.name.toLowerCase().includes(q) || d.user.email.toLowerCase().includes(q);
+  });
+  const selectedDonor = donors.find((d) => d.id === selectedDonorId);
 
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8 space-y-6">
       <header className="flex flex-wrap gap-4 justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-red-700 to-rose-500 bg-clip-text text-transparent">
-            Dashboard Rumah Sakit
+            Dashboard PMI
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Kelola stok darah & permintaan dari pasien</p>
+          <p className="text-sm text-slate-500 mt-1">Kelola permintaan pasien, donor, & stok darah</p>
         </div>
         <div className="flex gap-2 items-center">
-          <Link href="/dashboard/hospital/checkup">
-            <Button size="sm" icon={<Icons.Plus />}>Pemeriksaan Donor</Button>
-          </Link>
-          <Button variant="success" size="sm" icon={showAddStock ? <Icons.X /> : <Icons.Plus />}
-            onClick={() => setShowAddStock(!showAddStock)}>
-            {showAddStock ? "Tutup" : "Tambah Stok"}
-          </Button>
           <NotificationBell />
           <Link href="/dashboard/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
@@ -83,130 +95,278 @@ export default function HospitalDashboard() {
         </div>
       </header>
 
-      {/* Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon="🩸" label="Total Batch" value={stocks.length} gradient="from-red-500 to-rose-600" />
-        <StatCard icon="✅" label="Available" value={totalAvailable} gradient="from-emerald-500 to-green-600" />
-        <StatCard icon="🧪" label="Quarantine" value={totalQuarantine} gradient="from-amber-500 to-yellow-600" />
-        <StatCard icon="📋" label="Permintaan Aktif" value={activeRequestsCount} gradient="from-blue-500 to-indigo-600" />
+        <StatCard icon="🩸" label="Total Stok" value={totalAvailable} gradient="from-red-500 to-rose-600" />
+        <StatCard icon="📋" label="Request Pending" value={pendingReqs.length} gradient="from-amber-500 to-orange-600" />
+        <StatCard icon="👤" label="Pendonor Terdaftar" value={donors.length} gradient="from-blue-500 to-indigo-600" />
+        <StatCard icon="📅" label="Jadwal Donor" value={schedules.length} gradient="from-emerald-500 to-green-600" />
       </section>
 
-      {/* Form Tambah Stok */}
-      {showAddStock && (
-        <AddStockForm onCreated={() => { setShowAddStock(false); refresh(); }} onCancel={() => setShowAddStock(false)} />
-      )}
+      {/* Permintaan Pasien */}
+      <Card title={`📋 Permintaan Pasien (${pendingReqs.length} pending)`} icon={<Icons.Heart />} variant="highlight">
+        {loading ? <Loader /> : pendingReqs.length === 0 && accReqs.length === 0 ? (
+          <EmptyState icon="📭" title="Belum ada permintaan dari pasien" />
+        ) : (
+          <div className="space-y-3">
+            {pendingReqs.map((r) => (
+              <PatientRequestCard key={r.id} r={r} onAcc={() => accRequest(r.id)}
+                onReject={() => updateRequestStatus(r.id, "REJECTED")} />
+            ))}
+            {accReqs.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-medium text-slate-600">
+                  Lihat request yang sudah diproses ({accReqs.length})
+                </summary>
+                <div className="space-y-2 mt-2">
+                  {accReqs.map((r) => (
+                    <ProcessedRequestCard key={r.id} r={r}
+                      onShip={() => updateRequestStatus(r.id, "SHIPPED")}
+                      onDeliver={() => updateRequestStatus(r.id, "DELIVERED")}
+                      onFulfill={() => updateRequestStatus(r.id, "FULFILLED")} />
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </Card>
 
-      {/* Stok Grid */}
-      <Card title="Stok Darah" subtitle={`${stocks.length} batch · ${totalAvailable} kantong AVAILABLE`}
-        icon={<Icons.Drop />}>
-        {/* Aggregate per golongan */}
+      {/* Pendonor */}
+      <Card title={`👤 Pendonor Terdaftar di PMI Ini (${donors.length})`}
+        subtitle="Pilih pendonor untuk input pemeriksaan fisik & ambil darah">
+        <div className="mb-3 flex gap-2">
+          <input
+            type="text"
+            value={donorSearch}
+            onChange={(e) => setDonorSearch(e.target.value)}
+            placeholder="🔍 Cari nama atau email pendonor..."
+            className="flex-1 border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
+          />
+          <select
+            value={selectedDonorId}
+            onChange={(e) => setSelectedDonorId(e.target.value)}
+            className="border border-slate-300 px-3 py-2 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500 outline-none"
+          >
+            <option value="">— Pilih Donor —</option>
+            {filteredDonors.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.user.name} ({d.bloodType}{d.rhesusType === "POSITIVE" ? "+" : "-"})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedDonor && (
+          <DonorActionBox donor={selectedDonor} onChanged={refresh} />
+        )}
+      </Card>
+
+      {/* Stok */}
+      <Card title="🩸 Stok Darah" subtitle={`${stocks.length} batch · ${totalAvailable} kantong tersedia`}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-4">
           {["A", "B", "AB", "O"].flatMap((bt) =>
             ["POSITIVE", "NEGATIVE"].map((rh) => {
               const total = stocks
                 .filter((s) => s.bloodType === bt && s.rhesusType === rh && s.status === "AVAILABLE")
                 .reduce((sum, s) => sum + s.quantity, 0);
-              const lowStock = total > 0 && total < 5;
+              const critical = total < 5;
               return (
-                <div key={`${bt}${rh}`}
-                  className={`relative bg-gradient-to-br ${
-                    total === 0 ? "from-slate-50 to-slate-100" :
-                    lowStock ? "from-orange-50 to-amber-100" :
-                    "from-red-50 to-pink-100"
-                  } p-3 rounded-lg text-center border ${
-                    lowStock ? "border-orange-200" : "border-red-100"
-                  } hover:shadow-sm transition`}>
-                  <p className={`text-xl font-bold ${total === 0 ? "text-slate-400" : "text-red-700"}`}>
+                <div key={`${bt}${rh}`} className={`p-3 rounded-lg text-center border-2 ${
+                  total === 0 ? "bg-slate-50 border-slate-200" :
+                  critical ? "bg-red-50 border-red-300" :
+                  "bg-emerald-50 border-emerald-200"
+                }`}>
+                  <p className={`text-xl font-bold ${total === 0 ? "text-slate-400" : critical ? "text-red-700" : "text-emerald-700"}`}>
                     {bt}{rh === "POSITIVE" ? "+" : "-"}
                   </p>
                   <p className="text-xs text-slate-600">{total} kantong</p>
-                  {lowStock && <span className="absolute top-1 right-1 text-xs">⚠️</span>}
+                  {(critical || total === 0) && (
+                    <button onClick={() => broadcastBlood(bt, rh)}
+                      className={`mt-1 text-[10px] text-white px-2 py-0.5 rounded-full font-semibold ${
+                        total === 0 ? "bg-amber-600 hover:bg-amber-700" : "bg-red-600 hover:bg-red-700"
+                      }`}>
+                      {total === 0 ? "🚨 Minta Donor" : "📢 Broadcast"}
+                    </button>
+                  )}
                 </div>
               );
             })
           )}
         </div>
-
-        {/* Detail per batch */}
-        <details className="text-sm">
-          <summary className="cursor-pointer text-slate-600 hover:text-slate-900 font-medium py-2">
-            📦 Lihat detail per batch ({stocks.length})
-          </summary>
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500 uppercase font-semibold border-b border-slate-200">
-                  <th className="py-2">Golongan</th><th>Komponen</th><th>Qty</th><th>Expiry</th><th>Lokasi</th><th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stocks.map((s) => (
-                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="py-2">
-                      <span className="font-bold text-red-600">{s.bloodType}{s.rhesusType === "POSITIVE" ? "+" : "-"}</span>
-                    </td>
-                    <td>{s.component}</td>
-                    <td className="font-medium">{s.quantity}</td>
-                    <td>{new Date(s.expiryDate).toLocaleDateString("id-ID")}</td>
-                    <td>{s.location}</td>
-                    <td><Badge status={s.status} /></td>
-                  </tr>
-                ))}
-                {stocks.length === 0 && !loading && (
-                  <tr><td colSpan={6} className="text-center py-6 text-slate-400">Belum ada stok</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </details>
       </Card>
 
-      {/* Requests */}
-      <Card title={`Permintaan Darah (${requests.length})`} icon={<Icons.Heart />}>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}
-          </div>
-        ) : requests.length === 0 ? (
-          <EmptyState icon="📭" title="Belum ada permintaan" description="Permintaan dari pasien akan muncul di sini." />
+      {/* Jadwal */}
+      <Card title={`📅 Jadwal Donor Masuk (${schedules.length})`}>
+        {schedules.length === 0 ? (
+          <EmptyState icon="📭" title="Belum ada jadwal donor" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
-                  <th className="py-2">Tanggal</th><th>Golongan</th><th>Qty</th><th>Urgency</th><th>Status</th><th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="py-3 text-xs text-slate-600">
-                      {new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
-                    </td>
-                    <td>
-                      <span className="font-bold text-red-600">{r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}</span>
-                    </td>
-                    <td className="font-medium">{r.quantity}</td>
-                    <td><Badge status={r.urgency} /></td>
-                    <td><Badge status={r.reqStatus} /></td>
-                    <td>
-                      {r.reqStatus !== "FULFILLED" && r.reqStatus !== "CANCELLED" && r.reqStatus !== "REJECTED" && (
-                        <div className="flex gap-1">
-                          <Button variant="success" size="sm" icon={<Icons.Check />}
-                            onClick={() => updateStatus(r.id, "FULFILLED")}>Fulfill</Button>
-                          <Button variant="secondary" size="sm" icon={<Icons.X />}
-                            onClick={() => updateStatus(r.id, "REJECTED")}>Reject</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {schedules.map((s) => (
+              <div key={s.id} className="flex justify-between items-center border p-3 rounded-lg">
+                <div>
+                  <p className="font-medium">{s.donor.user.name} <span className="text-xs text-slate-500">({s.donor.user.phoneNum})</span></p>
+                  <p className="text-xs text-slate-600">
+                    {new Date(s.jadwal).toLocaleDateString("id-ID", { dateStyle: "full" })} · Sesi {s.sesi}
+                  </p>
+                </div>
+                <Badge status={s.status} />
+              </div>
+            ))}
           </div>
         )}
       </Card>
     </main>
+  );
+}
+
+function PatientRequestCard({ r, onAcc, onReject }: { r: any; onAcc: () => void; onReject: () => void }) {
+  return (
+    <div className="bg-white border border-amber-200 rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 flex-1">
+          <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center font-bold shadow-sm">
+            {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">{r.patient?.user?.name ?? "Pasien"} — {r.quantity} kantong</p>
+            <div className="text-xs text-slate-600 mt-1 space-y-0.5">
+              <p>📞 {r.patient?.user?.phoneNum ?? "-"} · 📧 {r.patient?.user?.email ?? "-"}</p>
+              <p>🏥 <strong>RS Tujuan:</strong> {r.targetHospitalName}</p>
+              <p>📍 {r.targetHospitalAddress}</p>
+              {r.doctorName && <p>👨‍⚕️ Dokter: {r.doctorName}</p>}
+              {r.familyContact && <p>👨‍👩‍👧 Keluarga: {r.familyContact}</p>}
+              <p className="text-slate-400 text-[10px]">{new Date(r.createdAt).toLocaleString("id-ID")}</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Button variant="success" size="sm" icon={<Icons.Check />} onClick={onAcc}>ACC</Button>
+          <Button variant="danger" size="sm" icon={<Icons.X />} onClick={onReject}>Tolak</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProcessedRequestCard({ r, onShip, onDeliver, onFulfill }: any) {
+  return (
+    <div className="border rounded-lg p-3 flex justify-between items-center text-sm">
+      <div>
+        <p className="font-medium">{r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"} ({r.quantity}) · {r.patient?.user?.name}</p>
+        <p className="text-xs text-slate-500">{r.targetHospitalName} · <Badge status={r.reqStatus} /></p>
+      </div>
+      <div className="flex gap-1">
+        {r.reqStatus === "ACC" && <Button size="sm" onClick={onShip}>Ship 🚚</Button>}
+        {r.reqStatus === "SHIPPED" && <Button size="sm" variant="success" onClick={onDeliver}>Delivered 🏥</Button>}
+        {r.reqStatus === "DELIVERED" && <Button size="sm" variant="success" onClick={onFulfill}>Fulfill ✅</Button>}
+      </div>
+    </div>
+  );
+}
+
+function DonorActionBox({ donor, onChanged }: { donor: any; onChanged: () => void }) {
+  const [showCheckup, setShowCheckup] = useState(false);
+  const lastCheckup = donor.checkups[0];
+
+  async function takeBlood() {
+    if (!confirm(`Ambil darah dari ${donor.user.name}? Stok bertambah 1 kantong ${donor.bloodType}${donor.rhesusType === "POSITIVE" ? "+" : "-"}.`)) return;
+    const res = await api("/pmi/take-blood", {
+      method: "POST",
+      body: JSON.stringify({ donorId: donor.id, volumeMl: 450, component: "WHOLE_BLOOD", location: "PMI" }),
+    });
+    const data = await res.json();
+    if (res.ok) { toast.success("Darah berhasil diambil!"); onChanged(); }
+    else toast.error(data.error ?? "Gagal ambil darah");
+  }
+
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-semibold">{donor.user.name}</p>
+          <p className="text-xs text-slate-600">
+            {donor.bloodType}{donor.rhesusType === "POSITIVE" ? "+" : "-"} ·
+            {donor.isEligible ? <span className="text-emerald-700"> ✅ Eligible</span> : <span className="text-amber-700"> ⚠️ Belum eligible</span>}
+            {donor.lastDonationDate && <> · Last: {new Date(donor.lastDonationDate).toLocaleDateString("id-ID")}</>}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setShowCheckup(!showCheckup)} icon={<Icons.Plus />}>
+            {showCheckup ? "Tutup" : "Pemeriksaan"}
+          </Button>
+          {donor.isEligible && (
+            <Button size="sm" variant="success" icon={<Icons.Drop />} onClick={takeBlood}>
+              Ambil Darah
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {lastCheckup && !showCheckup && (
+        <p className="text-xs text-slate-600">
+          📋 Last: Hb {lastCheckup.hemoglobinLevel}, BP {lastCheckup.systolicBP}/{lastCheckup.diastolicBP}, BB {lastCheckup.weight}kg ·
+          {lastCheckup.passed ? <span className="text-emerald-700"> LOLOS</span> : <span className="text-red-700"> TIDAK LOLOS</span>}
+        </p>
+      )}
+
+      {showCheckup && <CheckupForm donorId={donor.id} onDone={() => { setShowCheckup(false); onChanged(); }} />}
+    </div>
+  );
+}
+
+function CheckupForm({ donorId, onDone }: { donorId: string; onDone: () => void }) {
+  const [form, setForm] = useState({
+    hemoglobinLevel: "14", systolicBP: "120", diastolicBP: "80",
+    bodyTempC: "36.8", pulseRate: "75", weight: "60",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const res = await api("/pmi/checkup", {
+      method: "POST",
+      body: JSON.stringify({
+        donorId,
+        hemoglobinLevel: Number(form.hemoglobinLevel),
+        systolicBP: Number(form.systolicBP),
+        diastolicBP: Number(form.diastolicBP),
+        bodyTempC: Number(form.bodyTempC),
+        pulseRate: Number(form.pulseRate),
+        weight: Number(form.weight),
+      }),
+    });
+    const data = await res.json();
+    setSubmitting(false);
+    if (res.ok) {
+      toast.success(data.message);
+      onDone();
+    } else toast.error("Gagal simpan");
+  }
+
+  return (
+    <form onSubmit={submit} className="grid grid-cols-3 gap-2 bg-white p-3 rounded border">
+      {[
+        ["hemoglobinLevel", "Hb (g/dL)", "12.5-17"],
+        ["systolicBP", "Sistolik", "100-160"],
+        ["diastolicBP", "Diastolik", "60-100"],
+        ["bodyTempC", "Suhu (°C)", "36.5-37.5"],
+        ["pulseRate", "Nadi (BPM)", "50-100"],
+        ["weight", "BB (kg)", "≥45"],
+      ].map(([key, label, hint]) => (
+        <div key={key}>
+          <label className="text-[10px] font-semibold text-slate-700">{label}</label>
+          <input type="number" step="0.1" value={(form as any)[key]}
+            onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+            onFocus={(e) => e.target.select()}
+            className="w-full border px-2 py-1 rounded text-xs" required />
+          <p className="text-[9px] text-slate-400">{hint}</p>
+        </div>
+      ))}
+      <div className="col-span-3 flex gap-2">
+        <Button type="submit" size="sm" loading={submitting} icon={<Icons.Check />}>Simpan</Button>
+      </div>
+    </form>
   );
 }
 
@@ -222,106 +382,6 @@ function StatCard({ icon, label, value, gradient }: { icon: string; label: strin
   );
 }
 
-function AddStockForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState({
-    bloodType: "O", rhesusType: "POSITIVE", component: "WHOLE_BLOOD",
-    quantity: "10", expiryDate: "", location: "", source: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const qty = Number(form.quantity);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      toast.error("Jumlah kantong harus angka positif");
-      return;
-    }
-    setSubmitting(true);
-    const res = await api("/stocks", {
-      method: "POST",
-      body: JSON.stringify({ ...form, quantity: qty, expiryDate: new Date(form.expiryDate).toISOString() }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (res.ok) {
-      toast.success(data.message ?? "Stok dibuat (status QUARANTINE)");
-      onCreated();
-    } else {
-      toast.error(typeof data.error === "string" ? data.error : "Gagal tambah stok");
-    }
-  }
-
-  return (
-    <Card title="Tambah Stok Darah Baru"
-      subtitle="Stok akan masuk ke QUARANTINE — admin verify setelah uji lab"
-      icon={<Icons.Plus />} variant="success"
-      action={<Button variant="ghost" size="sm" icon={<Icons.X />} onClick={onCancel}>Tutup</Button>}>
-      <form onSubmit={submit} className="space-y-4">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <FormField label="Golongan">
-            <select value={form.bloodType} onChange={(e) => setForm({ ...form, bloodType: e.target.value })} className={inputCls}>
-              <option>A</option><option>B</option><option>AB</option><option>O</option>
-            </select>
-          </FormField>
-          <FormField label="Rhesus">
-            <select value={form.rhesusType} onChange={(e) => setForm({ ...form, rhesusType: e.target.value })} className={inputCls}>
-              <option value="POSITIVE">Rh+ Positif</option>
-              <option value="NEGATIVE">Rh- Negatif</option>
-            </select>
-          </FormField>
-          <FormField label="Komponen">
-            <select value={form.component} onChange={(e) => setForm({ ...form, component: e.target.value })} className={inputCls}>
-              <option value="WHOLE_BLOOD">Whole Blood</option>
-              <option value="PRC">PRC (Packed Red Cells)</option>
-              <option value="FFP">FFP (Fresh Frozen Plasma)</option>
-              <option value="TC">TC (Trombosit)</option>
-              <option value="CRYO">Cryoprecipitate</option>
-            </select>
-          </FormField>
-          <FormField label="Jumlah Kantong">
-            <input type="number" min={1} step={1} value={form.quantity}
-              onChange={(e) => setForm({ ...form, quantity: e.target.value.replace(/^0+(?=\d)/, "") })}
-              onFocus={(e) => e.target.select()}
-              className={inputCls} required placeholder="10" />
-          </FormField>
-          <FormField label="Tanggal Kadaluarsa">
-            <input type="date" value={form.expiryDate}
-              onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
-              className={inputCls} required />
-          </FormField>
-          <FormField label="Lokasi Penyimpanan" className="lg:col-span-2">
-            <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className={inputCls} placeholder="Jakarta Pusat" required />
-          </FormField>
-          <FormField label="Source (opsional)">
-            <input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}
-              className={inputCls} placeholder="UTD PMI" />
-          </FormField>
-        </div>
-
-        <div className="bg-white/60 border border-emerald-200 rounded-lg p-3 text-xs text-slate-700">
-          ℹ️ <strong>Status awal:</strong> <code className="bg-yellow-100 px-1.5 py-0.5 rounded">QUARANTINE</code>.
-          Admin pusat perlu verify ke <code className="bg-green-100 px-1.5 py-0.5 rounded">AVAILABLE</code> setelah uji lab lolos.
-        </div>
-
-        <div className="flex gap-2">
-          <Button type="submit" loading={submitting} variant="success" icon={<Icons.Check />}>
-            Simpan Stok
-          </Button>
-          <Button type="button" variant="ghost" onClick={onCancel}>Batal</Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
-
-const inputCls = "w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition text-sm";
-
-function FormField({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      <label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label>
-      {children}
-    </div>
-  );
+function Loader() {
+  return <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}</div>;
 }

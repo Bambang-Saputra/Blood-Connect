@@ -31,11 +31,41 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    // Validasi usia di sisi klien dulu (sebelum kirim)
+    if (form.role === "PENDONOR" && form.birthDate) {
+      const birthDate = new Date(form.birthDate);
+      const ageMs = Date.now() - birthDate.getTime();
+      const age = Math.floor(ageMs / (1000 * 60 * 60 * 24 * 365.25));
+      if (age < 17) {
+        alert(
+          `⚠️ Maaf, usia Anda baru ${age} tahun.\n\n` +
+          `Pendonor darah harus berusia minimal 17 tahun sesuai standar medis PMI.\n\n` +
+          `Silakan kembali saat berusia 17 tahun, atau daftar sebagai Pasien jika Anda butuh darah.`
+        );
+        return;
+      }
+      if (age > 65) {
+        alert(
+          `⚠️ Maaf, usia Anda ${age} tahun.\n\n` +
+          `Pendonor darah maksimal berusia 65 tahun sesuai standar medis PMI.\n\n` +
+          `Anda bisa membantu dengan cara lain — daftar sebagai Pasien jika perlu darah.`
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     const res = await api("/auth/register", { method: "POST", body: JSON.stringify(form) });
     const data = await res.json();
     if (!res.ok) {
+      // Khusus age error dari backend
+      if (data.error?.toString().includes("usia") || data.currentAge !== undefined) {
+        alert(`⚠️ ${data.error}\n\nUsia Anda saat ini: ${data.currentAge ?? "?"} tahun`);
+        setLoading(false);
+        return;
+      }
       setError(typeof data.error === "string" ? data.error : "Registrasi gagal — cek isian Anda");
       setLoading(false);
       return;
@@ -60,7 +90,7 @@ export default function RegisterPage() {
   const roleConfig = [
     {
       val: "PENDONOR", label: "Pendonor", emoji: "💉",
-      desc: "Donor darah, isi skrining, bantu pasien yang membutuhkan",
+      desc: "Donor darah, isi skrining, bantu pasien yang membutuhkan (min. usia 17 tahun)",
       color: "from-red-500 to-rose-600",
       lightBg: "bg-red-50 border-red-200",
     },
@@ -69,12 +99,6 @@ export default function RegisterPage() {
       desc: "Request darah untuk diri sendiri atau anggota keluarga",
       color: "from-blue-500 to-indigo-600",
       lightBg: "bg-blue-50 border-blue-200",
-    },
-    {
-      val: "RUMAH_SAKIT", label: "Rumah Sakit", emoji: "🏥",
-      desc: "Kelola stok darah & koordinasi dengan jaringan RS nasional",
-      color: "from-orange-500 to-amber-600",
-      lightBg: "bg-orange-50 border-orange-200",
     },
   ];
 
@@ -106,7 +130,7 @@ export default function RegisterPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-1">Saya ingin daftar sebagai...</h2>
             <p className="text-sm text-slate-500 mb-6">Pilih peran yang paling sesuai dengan tujuan Anda</p>
 
-            <div className="grid md:grid-cols-3 gap-3">
+            <div className="grid md:grid-cols-2 gap-3">
               {roleConfig.map((r) => {
                 const active = form.role === r.val;
                 return (
