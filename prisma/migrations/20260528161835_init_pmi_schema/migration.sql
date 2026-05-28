@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('PENDONOR', 'PASIEN', 'RUMAH_SAKIT', 'ADMIN');
+CREATE TYPE "Role" AS ENUM ('PENDONOR', 'PASIEN', 'PMI', 'ADMIN');
 
 -- CreateEnum
 CREATE TYPE "BloodType" AS ENUM ('A', 'B', 'AB', 'O');
@@ -11,16 +11,16 @@ CREATE TYPE "RhesusType" AS ENUM ('POSITIVE', 'NEGATIVE');
 CREATE TYPE "BloodComponent" AS ENUM ('WHOLE_BLOOD', 'PRC', 'FFP', 'TC', 'CRYO');
 
 -- CreateEnum
-CREATE TYPE "RequestStatus" AS ENUM ('PENDING', 'PROCESSING', 'MATCHED_STOCK', 'MATCHED_DONOR', 'IN_TRANSIT', 'FULFILLED', 'REJECTED', 'CANCELLED');
+CREATE TYPE "RequestStatus" AS ENUM ('PENDING', 'ACC', 'SHIPPED', 'DELIVERED', 'FULFILLED', 'SEARCHING', 'REJECTED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "StockStatus" AS ENUM ('AVAILABLE', 'RESERVED', 'EXPIRED', 'USED', 'QUARANTINE');
+CREATE TYPE "StockStatus" AS ENUM ('AVAILABLE', 'RESERVED', 'EXPIRED', 'USED');
 
 -- CreateEnum
 CREATE TYPE "ScheduleStatus" AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED', 'RESCHEDULED', 'COMPLETED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "HospitalStatus" AS ENUM ('UNVERIFIED', 'VERIFIED', 'SUSPENDED');
+CREATE TYPE "PmiStatus" AS ENUM ('UNVERIFIED', 'VERIFIED', 'SUSPENDED');
 
 -- CreateEnum
 CREATE TYPE "NotificationType" AS ENUM ('ELIGIBLE_DONOR_REQUEST', 'REQUEST_STATUS_UPDATE', 'SCHEDULE_UPDATE', 'STOCK_ALERT', 'ACCOUNT_VERIFICATION', 'GENERIC');
@@ -37,6 +37,8 @@ CREATE TABLE "User" (
     "phoneNum" TEXT NOT NULL,
     "address" TEXT,
     "city" TEXT NOT NULL,
+    "province" TEXT,
+    "zone" TEXT,
     "birthDate" TIMESTAMP(3),
     "role" "Role" NOT NULL,
     "isBlocked" BOOLEAN NOT NULL DEFAULT false,
@@ -58,6 +60,7 @@ CREATE TABLE "Pendonor" (
     "isEligible" BOOLEAN NOT NULL DEFAULT false,
     "eligibilityReason" TEXT,
     "totalDonations" INTEGER NOT NULL DEFAULT 0,
+    "preferredPmiId" TEXT,
 
     CONSTRAINT "Pendonor_pkey" PRIMARY KEY ("id")
 );
@@ -115,7 +118,7 @@ CREATE TABLE "RumahSakit" (
     "hospitalName" TEXT NOT NULL,
     "hospitalCode" TEXT NOT NULL,
     "hospitalLoc" TEXT NOT NULL,
-    "status" "HospitalStatus" NOT NULL DEFAULT 'UNVERIFIED',
+    "status" "PmiStatus" NOT NULL DEFAULT 'UNVERIFIED',
     "verifiedAt" TIMESTAMP(3),
     "verifiedById" TEXT,
     "licenseDoc" TEXT,
@@ -133,7 +136,7 @@ CREATE TABLE "StokDarah" (
     "quantity" INTEGER NOT NULL,
     "expiryDate" TIMESTAMP(3) NOT NULL,
     "location" TEXT NOT NULL,
-    "status" "StockStatus" NOT NULL DEFAULT 'QUARANTINE',
+    "status" "StockStatus" NOT NULL DEFAULT 'AVAILABLE',
     "source" TEXT,
     "donorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -151,12 +154,17 @@ CREATE TABLE "PermintaanDonor" (
     "rhesusType" "RhesusType" NOT NULL,
     "component" "BloodComponent" NOT NULL DEFAULT 'WHOLE_BLOOD',
     "quantity" INTEGER NOT NULL,
-    "urgency" TEXT NOT NULL DEFAULT 'NORMAL',
-    "reason" TEXT,
+    "targetHospitalName" TEXT,
+    "targetHospitalAddress" TEXT,
     "doctorName" TEXT,
+    "familyContact" TEXT,
+    "reason" TEXT,
     "reqStatus" "RequestStatus" NOT NULL DEFAULT 'PENDING',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "shippedAt" TIMESTAMP(3),
+    "deliveredAt" TIMESTAMP(3),
     "fulfilledAt" TIMESTAMP(3),
+    "rejectedReason" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "PermintaanDonor_pkey" PRIMARY KEY ("id")
 );
@@ -176,11 +184,13 @@ CREATE TABLE "StockAllocation" (
 CREATE TABLE "JadwalDonor" (
     "id" TEXT NOT NULL,
     "donorId" TEXT NOT NULL,
+    "pmiId" TEXT,
     "jadwal" TIMESTAMP(3) NOT NULL,
     "sesi" TEXT NOT NULL,
     "status" "ScheduleStatus" NOT NULL DEFAULT 'PENDING',
     "newDate" TIMESTAMP(3),
     "note" TEXT,
+    "linkedRequestId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -249,6 +259,12 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE INDEX "User_city_idx" ON "User"("city");
 
 -- CreateIndex
+CREATE INDEX "User_province_idx" ON "User"("province");
+
+-- CreateIndex
+CREATE INDEX "User_zone_idx" ON "User"("zone");
+
+-- CreateIndex
 CREATE INDEX "User_role_idx" ON "User"("role");
 
 -- CreateIndex
@@ -256,6 +272,9 @@ CREATE UNIQUE INDEX "Pendonor_userId_key" ON "Pendonor"("userId");
 
 -- CreateIndex
 CREATE INDEX "Pendonor_bloodType_rhesusType_isEligible_idx" ON "Pendonor"("bloodType", "rhesusType", "isEligible");
+
+-- CreateIndex
+CREATE INDEX "Pendonor_preferredPmiId_idx" ON "Pendonor"("preferredPmiId");
 
 -- CreateIndex
 CREATE INDEX "PemeriksaanDonor_donorId_examinedAt_idx" ON "PemeriksaanDonor"("donorId", "examinedAt");
@@ -285,10 +304,16 @@ CREATE INDEX "PermintaanDonor_reqStatus_createdAt_idx" ON "PermintaanDonor"("req
 CREATE INDEX "PermintaanDonor_bloodType_rhesusType_component_idx" ON "PermintaanDonor"("bloodType", "rhesusType", "component");
 
 -- CreateIndex
+CREATE INDEX "PermintaanDonor_hospitalId_idx" ON "PermintaanDonor"("hospitalId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "StockAllocation_requestId_stockId_key" ON "StockAllocation"("requestId", "stockId");
 
 -- CreateIndex
 CREATE INDEX "JadwalDonor_jadwal_status_idx" ON "JadwalDonor"("jadwal", "status");
+
+-- CreateIndex
+CREATE INDEX "JadwalDonor_pmiId_idx" ON "JadwalDonor"("pmiId");
 
 -- CreateIndex
 CREATE INDEX "DonorHistory_donorId_donationDate_idx" ON "DonorHistory"("donorId", "donationDate");
@@ -310,6 +335,9 @@ CREATE INDEX "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt"
 
 -- AddForeignKey
 ALTER TABLE "Pendonor" ADD CONSTRAINT "Pendonor_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Pendonor" ADD CONSTRAINT "Pendonor_preferredPmiId_fkey" FOREIGN KEY ("preferredPmiId") REFERENCES "RumahSakit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "PemeriksaanDonor" ADD CONSTRAINT "PemeriksaanDonor_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -340,6 +368,9 @@ ALTER TABLE "StockAllocation" ADD CONSTRAINT "StockAllocation_stockId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "RumahSakit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "DonorHistory" ADD CONSTRAINT "DonorHistory_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

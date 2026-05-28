@@ -1,40 +1,43 @@
 import { Response } from "express";
 import { z } from "zod";
-import { Prisma, RequestStatus } from "@prisma/client";
+import { RequestStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { processMatch } from "../services/matchSystemService";
 import { AuthedRequest } from "../middleware/auth";
 import { writeAudit } from "../lib/audit";
+import { notifyUser } from "../lib/notification";
 
 /**
- * =====================================================================
- * CONTROLLER: MatchSystem & Request Darah
- * =====================================================================
- * Endpoints:
- *   POST   /api/requests              — Use Case REQUEST (requestBlood)
- *   POST   /api/requests/:id/match    — Trigger MatchSystem manual
- *   GET    /api/requests/:id          — Use Case TRACK REQUEST
- *   PATCH  /api/requests/:id/status   — Use Case UPDATE STATUS (Rumah Sakit)
- * =====================================================================
+ * REQUEST DARAH CONTROLLER
+ * Flow: PENDING → ACC → SHIPPED → DELIVERED → FULFILLED
  */
 
-// ---------------------------------------------------------------------
-// Validator
-// ---------------------------------------------------------------------
+async function findPmiForCity(city: string, province?: string | null) {
+  let pmi = await prisma.pMI.findFirst({
+    where: { status: "VERIFIED", user: { city } },
+  });
+  if (!pmi && province) {
+    pmi = await prisma.pMI.findFirst({
+      where: { status: "VERIFIED", user: { province } },
+    });
+  }
+  if (!pmi) {
+    pmi = await prisma.pMI.findFirst({ where: { status: "VERIFIED" } });
+  }
+  return pmi;
+}
+
 const requestBloodSchema = z.object({
   bloodType: z.enum(["A", "B", "AB", "O"]),
   rhesusType: z.enum(["POSITIVE", "NEGATIVE"]),
-  quantity: z.number().int().positive(),
-  urgency: z.enum(["NORMAL", "URGENT", "CRITICAL"]).default("NORMAL"),
+  quantity: z.number().int().positive().max(20),
+  targetHospitalName: z.string().min(2),
+  targetHospitalAddress: z.string().min(5),
+  doctorName: z.string().optional(),
+  familyContact: z.string().optional(),
   reason: z.string().max(500).optional(),
 });
 
-// =====================================================================
-// 1) POST /api/requests — Use Case REQUEST (Activity Diagram #9)
-//    Aktor: Pasien atau Rumah Sakit
-// =====================================================================
 export async function createRequest(req: AuthedRequest, res: Response) {
-  // [Activity 2.1] Validasi input
   const parsed = requestBloodSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
@@ -43,117 +46,107 @@ export async function createRequest(req: AuthedRequest, res: Response) {
     });
   }
 
-  // Pastikan user adalah Pasien/RS dan ambil profile-nya
   const profile = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    include: { pasien: true, rumahSakit: true },
+    include: { pasien: true },
   });
-  if (!profile || (!profile.pasien && !profile.rumahSakit)) {
-    return res.status(403).json({ error: "Hanya Pasien/Rumah Sakit yang bisa request" });
+  if (!profile?.pasien) {
+    return res.status(403).json({ error: "Hanya Pasien yang bisa request darah" });
   }
 
-  // RS harus diverifikasi admin sebelum bisa transact
-  if (profile.rumahSakit && profile.rumahSakit.status !== "VERIFIED") {
-    return res.status(403).json({ error: "Akun RS belum diverifikasi admin" });
+  const targetPmi = await findPmiForCity(profile.city, profile.province);
+  if (!targetPmi) {
+    return res.status(503).json({ error: "Tidak ada PMI tersedia. Coba lagi nanti." });
   }
 
-  // [Activity 3.1] Buat entry Permintaan Donor — ReqStatus = PENDING
   const request = await prisma.permintaanDonor.create({
     data: {
-      patientId: profile.pasien?.id ?? null,
-      hospitalId: profile.rumahSakit?.id ?? null,
+      patientId: profile.pasien.id,
+      pmiId: targetPmi.id,
       bloodType: parsed.data.bloodType,
       rhesusType: parsed.data.rhesusType,
       quantity: parsed.data.quantity,
-      urgency: parsed.data.urgency,
+      targetHospitalName: parsed.data.targetHospitalName,
+      targetHospitalAddress: parsed.data.targetHospitalAddress,
+      doctorName: parsed.data.doctorName,
+      familyContact: parsed.data.familyContact,
       reason: parsed.data.reason,
-      reqStatus: RequestStatus.PENDING,
+      reqStatus: "PENDING",
     },
   });
 
-  // [Activity 3.3] Trigger MatchSystem async — return ke client lebih cepat
-  // Note: di production gunakan BullMQ queue. Untuk MVP kita fire-and-forget.
-  triggerMatchWithRetry(request.id).catch((err) =>
-    console.error("[match] fatal:", err)
-  );
+  const pmiUser = await prisma.pMI.findUnique({
+    where: { id: targetPmi.id },
+    include: { user: true },
+  });
+  if (pmiUser) {
+    await notifyUser({
+      userId: pmiUser.user.id,
+      type: "REQUEST_STATUS_UPDATE",
+      title: "🩸 Permintaan Darah Baru",
+      body: `Pasien ${profile.name} request ${parsed.data.bloodType}${parsed.data.rhesusType === "POSITIVE" ? "+" : "-"} ${parsed.data.quantity} kantong untuk ${parsed.data.targetHospitalName}.`,
+      meta: { requestId: request.id },
+    });
+  }
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "CREATE",
+    entity: "PermintaanDonor",
+    entityId: request.id,
+    after: request,
+    ipAddress: req.ip,
+  });
 
   return res.status(201).json({
-    message: "Permintaan darah berhasil dibuat. MatchSystem sedang memproses.",
+    message: "Permintaan dikirim ke PMI. Menunggu konfirmasi.",
     request,
   });
 }
 
-// =====================================================================
-// 2) POST /api/requests/:id/match — Trigger ulang MatchSystem
-//    Berguna untuk admin yang ingin re-process request stuck di PENDING
-// =====================================================================
-export async function triggerMatch(req: AuthedRequest, res: Response) {
-  try {
-    const result = await triggerMatchWithRetry(req.params.id);
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ error: "MatchSystem error", detail: err.message });
-  }
-}
-
-// =====================================================================
-// 3a) GET /api/requests?mine=true — list semua request milik user yang login
-// =====================================================================
-// =====================================================================
-// 3a) GET /api/requests?mine=true — list semua request atau request RS
-// =====================================================================
 export async function listMyRequests(req: AuthedRequest, res: Response) {
   const profile = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    include: { pasien: true, rumahSakit: true },
+    include: { pasien: true, pmi: true },
   });
   if (!profile) return res.status(404).json({ error: "User tidak ditemukan" });
 
-  const isMineOnly = req.query.mine === "true";
-  let whereClause: Prisma.PermintaanDonorWhereInput = {};
-
-  if (profile.rumahSakit && !isMineOnly) {
-    // Mode RS: Lihat request buatan sendiri ATAU request dari pasien mandiri
-    whereClause = {
-      OR: [
-        { hospitalId: profile.rumahSakit.id },
-        { hospitalId: null },
-      ],
-    };
+  let where: any = {};
+  if (profile.role === "ADMIN") {
+    where = {};
+  } else if (profile.pmi) {
+    where = { pmiId: profile.pmi.id };
+  } else if (profile.pasien) {
+    where = { patientId: profile.pasien.id };
   } else {
-    // Mode "Mine": Pasien murni cuma lihat miliknya, RS lihat miliknya
-    whereClause = {
-      OR: [
-        ...(profile.pasien ? [{ patientId: profile.pasien.id }] : []),
-        ...(profile.rumahSakit ? [{ hospitalId: profile.rumahSakit.id }] : []),
-      ],
-    };
+    return res.json({ data: [] });
   }
 
   const data = await prisma.permintaanDonor.findMany({
-    where: whereClause,
-    orderBy: { createdAt: "desc" },
-    take: 50,
+    where,
     include: {
-      // Tambahkan include ini agar RS bisa melihat nama pasiennya
-      patient: { include: { user: { select: { name: true, city: true } } } },
-      hospital: { select: { hospitalName: true } },
-    }
+      patient: { include: { user: { select: { name: true, phoneNum: true, city: true, email: true } } } },
+      pmi: { select: { pmiName: true, pmiCode: true, pmiLoc: true } },
+      allocations: {
+        include: {
+          stock: {
+            include: { pmi: { select: { pmiName: true, pmiLoc: true } } },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
   });
-  
   return res.json({ data });
 }
 
-// =====================================================================
-// 3) GET /api/requests/:id — Use Case TRACK REQUEST
-// =====================================================================
 export async function getRequest(req: AuthedRequest, res: Response) {
-  // [Activity 1.1] Ambil data permintaan berdasarkan id (+ otorisasi)
   const request = await prisma.permintaanDonor.findUnique({
     where: { id: req.params.id },
     include: {
-      patient: { include: { user: { select: { id: true, name: true, city: true } } } },
-      hospital: true,
+      patient: { include: { user: { select: { id: true, name: true, city: true, phoneNum: true, email: true } } } },
+      pmi: { include: { user: { select: { phoneNum: true, email: true } } } },
       allocations: { include: { stock: true } },
       donorNotifs: {
         include: { donor: { include: { user: { select: { name: true, phoneNum: true } } } } },
@@ -162,45 +155,42 @@ export async function getRequest(req: AuthedRequest, res: Response) {
   });
   if (!request) return res.status(404).json({ error: "Request tidak ditemukan" });
 
-  // [Exception 1.1] Otorisasi: hanya pemilik / RS / admin
   const u = req.user!;
   const isOwner =
     request.patient?.userId === u.id ||
-    request.hospital?.userId === u.id ||
+    request.pmi?.userId === u.id ||
     u.role === "ADMIN";
   if (!isOwner) return res.status(403).json({ error: "Forbidden" });
 
   return res.json(request);
 }
 
-// =====================================================================
-// 4) PATCH /api/requests/:id/status — Use Case UPDATE STATUS (RS/Sistem)
-// =====================================================================
 const updateStatusSchema = z.object({
-  newStatus: z.enum([
-    "PROCESSING",
-    "MATCHED_STOCK",
-    "MATCHED_DONOR",
-    "FULFILLED",
-    "REJECTED",
-    "CANCELLED",
-  ]),
-  note: z.string().max(500).optional(),
+  newStatus: z.enum(["ACC", "SHIPPED", "DELIVERED", "FULFILLED", "REJECTED", "CANCELLED", "SEARCHING"]),
+  rejectedReason: z.string().optional(),
 });
 
 export async function updateRequestStatus(req: AuthedRequest, res: Response) {
   const parsed = updateStatusSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const before = await prisma.permintaanDonor.findUnique({ where: { id: req.params.id } });
+  const before = await prisma.permintaanDonor.findUnique({
+    where: { id: req.params.id },
+    include: { patient: { include: { user: true } } },
+  });
   if (!before) return res.status(404).json({ error: "Request tidak ditemukan" });
+
+  const updateData: any = { reqStatus: parsed.data.newStatus as RequestStatus };
+  if (parsed.data.newStatus === "SHIPPED") updateData.shippedAt = new Date();
+  if (parsed.data.newStatus === "DELIVERED") updateData.deliveredAt = new Date();
+  if (parsed.data.newStatus === "FULFILLED") updateData.fulfilledAt = new Date();
+  if (parsed.data.newStatus === "REJECTED" && parsed.data.rejectedReason) {
+    updateData.rejectedReason = parsed.data.rejectedReason;
+  }
 
   const updated = await prisma.permintaanDonor.update({
     where: { id: req.params.id },
-    data: {
-      reqStatus: parsed.data.newStatus as any,
-      fulfilledAt: parsed.data.newStatus === "FULFILLED" ? new Date() : undefined,
-    },
+    data: updateData,
   });
 
   await writeAudit({
@@ -209,27 +199,28 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
     entity: "PermintaanDonor",
     entityId: updated.id,
     before: { status: before.reqStatus },
-    after: { status: updated.reqStatus, note: parsed.data.note },
+    after: { status: updated.reqStatus },
     ipAddress: req.ip,
   });
 
-  return res.json({ message: "Status diperbarui", request: updated });
-}
-
-// =====================================================================
-// Helper: retry MatchSystem saat terjadi serialization conflict
-// =====================================================================
-async function triggerMatchWithRetry(requestId: string, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await processMatch(requestId);
-    } catch (err: any) {
-      const isSerial =
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        (err.code === "P2034" || err.message.includes("serialization"));
-      if (!isSerial || i === attempts - 1) throw err;
-      // backoff sebelum retry
-      await new Promise((r) => setTimeout(r, 100 * (i + 1)));
-    }
+  if (before.patient) {
+    const statusLabel: Record<string, string> = {
+      ACC: "✅ Permintaan Anda diterima PMI",
+      SHIPPED: "🚚 Darah sedang dikirim ke RS",
+      DELIVERED: "🏥 Darah sudah sampai di RS",
+      FULFILLED: "✅ Transaksi selesai",
+      REJECTED: "❌ Permintaan ditolak",
+      SEARCHING: "🔍 Mencari pendonor sukarela",
+    };
+    await notifyUser({
+      userId: before.patient.userId,
+      email: before.patient.user.email,
+      type: "REQUEST_STATUS_UPDATE",
+      title: statusLabel[parsed.data.newStatus] ?? "Status Permintaan Berubah",
+      body: parsed.data.rejectedReason ?? `Status berubah menjadi ${parsed.data.newStatus}`,
+      meta: { requestId: updated.id },
+    });
   }
+
+  return res.json({ message: "Status diperbarui", request: updated });
 }
