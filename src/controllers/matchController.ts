@@ -54,6 +54,9 @@ export async function createRequest(req: AuthedRequest, res: Response) {
     return res.status(403).json({ error: "Hanya Pasien yang bisa request darah" });
   }
 
+  // PMI routing: pakai patient.city sebagai approximation
+  // (asumsi: pasien biasanya dirawat di RS di kota tempat tinggal)
+  // Future: parse targetHospitalAddress untuk city detection
   const targetPmi = await findPmiForCity(profile.city, profile.province);
   if (!targetPmi) {
     return res.status(503).json({ error: "Tidak ada PMI tersedia. Coba lagi nanti." });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, setToken, dashboardPath } from "../lib/api";
@@ -12,17 +12,28 @@ import { Button, Icons } from "../lib/ui";
  */
 export default function RegisterPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1); // 1: pilih role, 2: data
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pmiList, setPmiList] = useState<any[]>([]);
+  const [showPwd, setShowPwd] = useState(false);
   const [form, setForm] = useState({
     role: "PENDONOR",
     email: "", password: "", name: "", phoneNum: "",
     province: "", city: "", zone: "", address: "",
     birthDate: "",
     bloodType: "O", rhesusType: "POSITIVE",
+    preferredPmiId: "",
     hospitalName: "", hospitalCode: "", hospitalLoc: "",
   });
+
+  // Load list PMI public (untuk donor pilih PMI)
+  useEffect(() => {
+    // Endpoint butuh auth — anonymous user tidak bisa. Skip kalau gagal.
+    api("/pmi/list").then((r) => r.json())
+      .then((d) => setPmiList(d.data ?? []))
+      .catch(() => setPmiList([]));
+  }, []);
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -190,7 +201,21 @@ export default function RegisterPage() {
               <div className="grid md:grid-cols-2 gap-3">
                 <Input label="Nama Lengkap" value={form.name} onChange={(v) => update("name", v)} required />
                 <Input label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} required />
-                <Input label="Password" type="password" value={form.password} onChange={(v) => update("password", v)} required minLength={8} hint="Minimal 8 karakter" />
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPwd ? "text" : "password"} required minLength={8}
+                      value={form.password} onChange={(e) => update("password", e.target.value)}
+                      className="w-full border border-slate-300 px-4 py-2.5 pr-12 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none"
+                    />
+                    <button type="button" onClick={() => setShowPwd(!showPwd)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm">
+                      {showPwd ? "🙈" : "👁"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">Minimal 8 karakter</p>
+                </div>
                 <Input label="No HP" value={form.phoneNum} onChange={(v) => update("phoneNum", v)} required placeholder="0812xxxxxxxx" />
               </div>
             </div>
@@ -225,13 +250,42 @@ export default function RegisterPage() {
 
             {/* Role-specific */}
             {form.role === "PENDONOR" && (
-              <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-xl p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">🩸 Data Golongan Darah</h3>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <FormSelect label="Golongan Darah" value={form.bloodType} onChange={(v) => update("bloodType", v)}
-                    options={[["A", "A"], ["B", "B"], ["AB", "AB"], ["O", "O"]]} />
-                  <FormSelect label="Rhesus" value={form.rhesusType} onChange={(v) => update("rhesusType", v)}
-                    options={[["POSITIVE", "Positif (+)"], ["NEGATIVE", "Negatif (-)"]]} />
+              <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-xl p-4 space-y-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-3">🩸 Data Golongan Darah</h3>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <FormSelect label="Golongan Darah" value={form.bloodType} onChange={(v) => update("bloodType", v)}
+                      options={[["A", "A"], ["B", "B"], ["AB", "AB"], ["O", "O"]]} />
+                    <FormSelect label="Rhesus" value={form.rhesusType} onChange={(v) => update("rhesusType", v)}
+                      options={[["POSITIVE", "Positif (+)"], ["NEGATIVE", "Negatif (-)"]]} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    🏥 PMI Tempat Akan Donor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={form.preferredPmiId}
+                    onChange={(e) => update("preferredPmiId", e.target.value)}
+                    required
+                    className="w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none"
+                  >
+                    <option value="">— Pilih PMI —</option>
+                    {pmiList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.pmiName} ({p.pmiLoc})
+                      </option>
+                    ))}
+                  </select>
+                  {pmiList.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ Tidak ada PMI tersedia di sistem. Hubungi admin.
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500 mt-1">
+                    PMI ini akan menerima skrining & pemeriksaan fisik Anda. Bisa diubah di profil nanti.
+                  </p>
                 </div>
               </div>
             )}
@@ -243,22 +297,6 @@ export default function RegisterPage() {
                   Golongan darah pasien diisi <strong>per-request</strong>. Anda bisa request darah dengan golongan berbeda
                   (misal request untuk anggota keluarga).
                 </div>
-              </div>
-            )}
-
-            {form.role === "RUMAH_SAKIT" && (
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">🏥 Data Rumah Sakit</h3>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <Input label="Nama Rumah Sakit" value={form.hospitalName} onChange={(v) => update("hospitalName", v)} required />
-                  <Input label="Kode RS (unik)" value={form.hospitalCode} onChange={(v) => update("hospitalCode", v)} required placeholder="RSCM-01" />
-                  <div className="md:col-span-2">
-                    <Input label="Alamat Lengkap RS" value={form.hospitalLoc} onChange={(v) => update("hospitalLoc", v)} required />
-                  </div>
-                </div>
-                <p className="text-xs text-orange-700 mt-3">
-                  ⚠️ Akun RS akan berstatus UNVERIFIED — perlu verifikasi admin sebelum bisa transaksi
-                </p>
               </div>
             )}
 

@@ -48,7 +48,7 @@ router.post("/medical/screening", requireAuth, requireRole("PENDONOR"), medical.
 router.get("/medical/me", requireAuth, requireRole("PENDONOR"), medical.getMyCheckups);
 
 // ============ PMI (dashboard PMI) ============
-router.get("/pmi/list", requireAuth, pmi.listPublicPmis);                              // semua role boleh — untuk dropdown
+router.get("/pmi/list", pmi.listPublicPmis);                                            // PUBLIC — buat dropdown register donor
 router.get("/pmi/donors", requireAuth, requireRole("PMI"), pmi.listMyDonors);
 router.post("/pmi/checkup", requireAuth, requireRole("PMI"), pmi.createCheckup);
 router.post("/pmi/take-blood", requireAuth, requireRole("PMI"), pmi.takeBlood);

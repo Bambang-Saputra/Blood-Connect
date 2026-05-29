@@ -365,7 +365,7 @@ export async function accRequest(req: AuthedRequest, res: Response) {
 }
 
 // ===================== GET /pmi/list — public list of verified PMIs (for donor preferredPmi dropdown) =====================
-export async function listPublicPmis(_req: AuthedRequest, res: Response) {
+export async function listPublicPmis(_req: any, res: Response) {
   const pmis = await prisma.pMI.findMany({
     where: { status: "VERIFIED" },
     select: {
