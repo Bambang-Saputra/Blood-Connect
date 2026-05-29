@@ -18,6 +18,29 @@ import { notifyUser } from "../lib/notification";
  *   GET  /donor/screening/latest  — status skrining terbaru
  */
 
+// ===================== PATCH /donor/me/preferred-pmi =====================
+// Donor pilih atau ganti PMI tempat donor (popup setelah login pertama / dari profile)
+const preferredPmiSchema = z.object({ preferredPmiId: z.string().min(1) });
+
+export async function updatePreferredPmi(req: AuthedRequest, res: Response) {
+  const parsed = preferredPmiSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  const pmi = await prisma.pMI.findUnique({ where: { id: parsed.data.preferredPmiId } });
+  if (!pmi) return res.status(400).json({ error: "PMI tidak ditemukan" });
+  if (pmi.status !== "VERIFIED") return res.status(400).json({ error: "PMI tidak aktif" });
+
+  await prisma.pendonor.update({
+    where: { id: donor.id },
+    data: { preferredPmiId: parsed.data.preferredPmiId },
+  });
+
+  return res.json({ message: "PMI berhasil diperbarui", pmiName: pmi.pmiName });
+}
+
 // ===================== GET /donor/me =====================
 export async function getMe(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({

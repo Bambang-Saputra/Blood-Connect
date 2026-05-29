@@ -119,13 +119,29 @@ export default function DonorDashboard() {
         <div className="flex items-center gap-2">
           <ModeSwitcher currentRole="PENDONOR" />
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/donor/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}
             onClick={() => { clearToken(); location.href = "/"; }}>Keluar</Button>
         </div>
       </header>
+
+      {/* Banner: belum pilih PMI */}
+      {!me.preferredPmi && (
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🩸</span>
+            <div>
+              <p className="font-bold text-amber-900">Anda Belum Pilih PMI</p>
+              <p className="text-xs text-amber-700">Pilih PMI tempat akan donor di profil untuk mulai berkontribusi.</p>
+            </div>
+          </div>
+          <Link href="/dashboard/donor/profile">
+            <Button variant="primary" size="sm">Pilih PMI →</Button>
+          </Link>
+        </div>
+      )}
 
       {/* 1. Permintaan untuk Anda */}
       <Card title={`Permintaan untuk Anda (${notifs.length})`}

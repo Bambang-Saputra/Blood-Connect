@@ -1,39 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, setToken, dashboardPath } from "../lib/api";
 import { RegionPicker } from "../lib/RegionPicker";
 import { Button, Icons } from "../lib/ui";
+import { AlertModal, AlertState } from "../lib/AlertModal";
 
-/**
- * Register multi-role dengan visual step indicator
- */
 export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [pmiList, setPmiList] = useState<any[]>([]);
   const [showPwd, setShowPwd] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState | null>(null);
   const [form, setForm] = useState({
     role: "PENDONOR",
     email: "", password: "", name: "", phoneNum: "",
     province: "", city: "", zone: "", address: "",
     birthDate: "",
     bloodType: "O", rhesusType: "POSITIVE",
-    preferredPmiId: "",
-    hospitalName: "", hospitalCode: "", hospitalLoc: "",
   });
-
-  // Load list PMI public (untuk donor pilih PMI)
-  useEffect(() => {
-    // Endpoint butuh auth — anonymous user tidak bisa. Skip kalau gagal.
-    api("/pmi/list").then((r) => r.json())
-      .then((d) => setPmiList(d.data ?? []))
-      .catch(() => setPmiList([]));
-  }, []);
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -49,19 +37,31 @@ export default function RegisterPage() {
       const ageMs = Date.now() - birthDate.getTime();
       const age = Math.floor(ageMs / (1000 * 60 * 60 * 24 * 365.25));
       if (age < 17) {
-        alert(
-          `⚠️ Maaf, usia Anda baru ${age} tahun.\n\n` +
-          `Pendonor darah harus berusia minimal 17 tahun sesuai standar medis PMI.\n\n` +
-          `Silakan kembali saat berusia 17 tahun, atau daftar sebagai Pasien jika Anda butuh darah.`
-        );
+        setAlertState({
+          type: "warning",
+          title: "Usia Belum Mencukupi",
+          message: `Maaf, usia Anda baru ${age} tahun.`,
+          details: [
+            "Pendonor darah harus berusia minimal 17 tahun sesuai standar medis PMI.",
+            "Silakan kembali saat berusia 17 tahun.",
+            "Anda bisa daftar sebagai Pasien jika butuh darah.",
+          ],
+          primaryButton: "Saya Mengerti",
+        });
         return;
       }
       if (age > 65) {
-        alert(
-          `⚠️ Maaf, usia Anda ${age} tahun.\n\n` +
-          `Pendonor darah maksimal berusia 65 tahun sesuai standar medis PMI.\n\n` +
-          `Anda bisa membantu dengan cara lain — daftar sebagai Pasien jika perlu darah.`
-        );
+        setAlertState({
+          type: "warning",
+          title: "Usia Melebihi Batas",
+          message: `Maaf, usia Anda ${age} tahun.`,
+          details: [
+            "Pendonor darah maksimal berusia 65 tahun sesuai standar medis PMI.",
+            "Anda bisa membantu dengan cara lain.",
+            "Daftar sebagai Pasien jika perlu darah.",
+          ],
+          primaryButton: "Saya Mengerti",
+        });
         return;
       }
     }
@@ -73,7 +73,12 @@ export default function RegisterPage() {
     if (!res.ok) {
       // Khusus age error dari backend
       if (data.error?.toString().includes("usia") || data.currentAge !== undefined) {
-        alert(`⚠️ ${data.error}\n\nUsia Anda saat ini: ${data.currentAge ?? "?"} tahun`);
+        setAlertState({
+          type: "error",
+          title: "Validasi Usia Gagal",
+          message: data.error,
+          details: [`Usia Anda saat ini: ${data.currentAge ?? "tidak diketahui"} tahun`],
+        });
         setLoading(false);
         return;
       }
@@ -116,7 +121,9 @@ export default function RegisterPage() {
   const selectedRole = roleConfig.find((r) => r.val === form.role)!;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 py-8 px-4">
+    <>
+      <AlertModal state={alertState} onClose={() => setAlertState(null)} />
+      <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -260,32 +267,8 @@ export default function RegisterPage() {
                       options={[["POSITIVE", "Positif (+)"], ["NEGATIVE", "Negatif (-)"]]} />
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    🏥 PMI Tempat Akan Donor <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={form.preferredPmiId}
-                    onChange={(e) => update("preferredPmiId", e.target.value)}
-                    required
-                    className="w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none"
-                  >
-                    <option value="">— Pilih PMI —</option>
-                    {pmiList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.pmiName} ({p.pmiLoc})
-                      </option>
-                    ))}
-                  </select>
-                  {pmiList.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      ⚠️ Tidak ada PMI tersedia di sistem. Hubungi admin.
-                    </p>
-                  )}
-                  <p className="text-xs text-slate-500 mt-1">
-                    PMI ini akan menerima skrining & pemeriksaan fisik Anda. Bisa diubah di profil nanti.
-                  </p>
+                <div className="bg-white/60 border border-red-200 rounded-lg p-3 text-xs text-slate-700">
+                  💡 PMI tempat donor akan Anda pilih nanti di <strong>dashboard</strong> — bisa fleksibel ganti tiap kali jadwal donor (mis. lagi di luar kota).
                 </div>
               </div>
             )}
@@ -323,9 +306,11 @@ export default function RegisterPage() {
           </form>
         )}
       </div>
-    </main>
+      </main>
+    </>
   );
 }
+
 
 const inputCls = "w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition";
 

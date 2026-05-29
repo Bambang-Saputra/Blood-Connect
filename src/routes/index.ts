@@ -35,6 +35,7 @@ router.patch("/requests/:id/status", requireAuth, requireRole("PMI", "ADMIN"), m
 
 // ============ PENDONOR ============
 router.get("/donor/me", requireAuth, requireRole("PENDONOR"), donor.getMe);
+router.patch("/donor/me/preferred-pmi", requireAuth, requireRole("PENDONOR"), donor.updatePreferredPmi);
 router.get("/donor/screening/latest", requireAuth, requireRole("PENDONOR"), donor.getLatestScreening);
 router.post("/donor/check-eligible", requireAuth, requireRole("PENDONOR"), donor.checkEligibleHandler);
 router.post("/donor/schedules", requireAuth, requireRole("PENDONOR"), donor.createSchedule);

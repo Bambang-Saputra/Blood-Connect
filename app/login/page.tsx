@@ -143,33 +143,8 @@ export default function LoginPage() {
             </Link>
           </p>
 
-          {/* Demo Accounts */}
-          <div className="mt-8 pt-6 border-t border-slate-200">
-            <p className="text-xs text-slate-500 mb-3 font-semibold uppercase tracking-wide">
-              🎭 Akun Demo (Click untuk Auto-fill)
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { role: "Admin", email: "admin@bloodconnect.id", pw: "admin12345", emoji: "🛡️", color: "from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 text-red-700 border-red-200" },
-                { role: "PMI", email: "pmi-jakarta@test.com", pw: "password123", emoji: "🩸", color: "from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 text-orange-700 border-orange-200" },
-                { role: "Pendonor", email: "donor1@test.com", pw: "password123", emoji: "💉", color: "from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 text-blue-700 border-blue-200" },
-                { role: "Pasien", email: "pasien1@test.com", pw: "password123", emoji: "🩺", color: "from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 text-green-700 border-green-200" },
-              ].map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => { setEmail(acc.email); setPassword(acc.pw); }}
-                  className={`bg-gradient-to-br ${acc.color} border px-3 py-2.5 rounded-lg transition text-left group`}
-                >
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-lg">{acc.emoji}</span>
-                    <span className="font-bold text-xs">{acc.role}</span>
-                  </div>
-                  <p className="text-[10px] opacity-75 font-mono truncate">{acc.email}</p>
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Demo accounts section removed — not valid data
+              kalau ingin testing, jalankan: npm run seed */}
         </div>
       </section>
     </main>

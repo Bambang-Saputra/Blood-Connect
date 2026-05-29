@@ -370,7 +370,7 @@ export async function listPublicPmis(_req: any, res: Response) {
     where: { status: "VERIFIED" },
     select: {
       id: true, pmiName: true, pmiCode: true, pmiLoc: true,
-      user: { select: { city: true, province: true } },
+      user: { select: { city: true, province: true, zone: true } },
     },
     orderBy: { pmiName: "asc" },
   });

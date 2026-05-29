@@ -55,7 +55,7 @@ export default function AdminDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/admin/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}

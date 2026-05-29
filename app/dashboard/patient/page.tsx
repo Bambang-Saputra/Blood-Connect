@@ -85,7 +85,7 @@ export default function PatientDashboard() {
         <div className="flex items-center gap-2">
           <ModeSwitcher currentRole="PASIEN" />
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/patient/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}

@@ -87,7 +87,7 @@ export default function PmiDashboard() {
         </div>
         <div className="flex gap-2 items-center">
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/hospital/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}
