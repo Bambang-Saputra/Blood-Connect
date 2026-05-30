@@ -8,12 +8,15 @@ import { writeAudit } from "../lib/audit";
  * =====================================================================
  * CONTROLLER: Medical Examination + Screening
  * =====================================================================
- * Endpoint nakes/admin RS untuk input hasil pemeriksaan fisik pendonor,
+ * Endpoint nakes PMI untuk input hasil pemeriksaan fisik pendonor,
  * dan endpoint pendonor untuk mengisi kuesioner skrining sendiri.
+ *
+ * CATATAN: Pemeriksaan fisik DILAKUKAN DI PMI. Setiap checkup di-scope
+ * ke PMI yang melakukan (via pmiId).
  * =====================================================================
  */
 
-// ----- 0) Helper: cari donor by email (untuk auto-fill form RS) -----
+// ----- 0) Helper: cari donor by email (untuk auto-fill form PMI) -----
 export async function lookupDonor(req: AuthedRequest, res: Response) {
   const email = String(req.query.email ?? "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Email wajib diisi" });
@@ -35,8 +38,7 @@ export async function lookupDonor(req: AuthedRequest, res: Response) {
   });
 }
 
-// ----- 1) Pemeriksaan fisik (diisi nakes/admin) -----
-// Terima donorId ATAU donorEmail
+// ----- 1) Pemeriksaan fisik (diisi nakes PMI) -----
 const checkupSchema = z.object({
   donorId: z.string().optional(),
   donorEmail: z.string().email().optional(),
@@ -70,9 +72,11 @@ export async function createCheckup(req: AuthedRequest, res: Response) {
     donorId = user.pendonor.id;
   }
 
-  // Pastikan donor ada
   const donor = await prisma.pendonor.findUnique({ where: { id: donorId! } });
   if (!donor) return res.status(404).json({ error: "Pendonor tidak ditemukan" });
+
+  // Resolve pmiId — kalau yang input adalah user PMI, attach ke PMI mereka
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
 
   // Aturan lolos: semua vital dalam rentang medis
   const passed =
@@ -86,6 +90,7 @@ export async function createCheckup(req: AuthedRequest, res: Response) {
   const checkup = await prisma.pemeriksaanDonor.create({
     data: {
       donorId: donorId!,
+      pmiId: pmi?.id,
       hemoglobinLevel: d.hemoglobinLevel,
       systolicBP: d.systolicBP,
       diastolicBP: d.diastolicBP,
@@ -137,7 +142,6 @@ export async function submitScreening(req: AuthedRequest, res: Response) {
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
   const a = parsed.data;
-  // Aturan: lolos jika TIDAK ada flag berisiko
   const passed =
     !a.hasFever && !a.recentSurgery && !a.recentTattoo &&
     !a.isPregnantOrLactating && !a.hasHIVOrHepatitis &&
@@ -148,7 +152,7 @@ export async function submitScreening(req: AuthedRequest, res: Response) {
   });
 
   return res.status(201).json({
-    message: passed ? "Skrining lolos — silakan lanjut ke pemeriksaan fisik" : "Belum lolos skrining, lihat alasan",
+    message: passed ? "Skrining lolos — silakan lanjut ke pemeriksaan fisik di PMI" : "Belum lolos skrining, lihat alasan",
     screening,
   });
 }

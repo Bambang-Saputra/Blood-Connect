@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { z } from "zod";
-import { HospitalStatus, NotificationType, ScheduleStatus } from "@prisma/client";
+import { PmiStatus, NotificationType, ScheduleStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AuthedRequest } from "../middleware/auth";
 import { notifyUser } from "../lib/notification";
@@ -8,19 +8,23 @@ import { writeAudit } from "../lib/audit";
 
 /**
  * Endpoints khusus admin pusat Blood Connect.
- *   - GET  /admin/schedules?status=PENDING
- *   - PATCH /admin/schedules/:id          (Use Case CONFIRM)
- *   - GET  /admin/requests?status=PENDING
- *   - GET  /admin/hospitals?status=UNVERIFIED
- *   - PATCH /admin/hospitals/:id/verify
+ *   - GET    /admin/schedules?status=PENDING
+ *   - PATCH  /admin/schedules/:id          (Use Case CONFIRM)
+ *   - GET    /admin/requests?status=PENDING
+ *   - GET    /admin/pmis?status=UNVERIFIED
+ *   - PATCH  /admin/pmis/:id/verify
+ *   - GET    /admin/stocks/quarantine
  */
 
-// ===== 1) List jadwal pending (Use Case CONFIRM) =====
+// ===== 1) List jadwal pending =====
 export async function listSchedules(req: AuthedRequest, res: Response) {
   const status = req.query.status as ScheduleStatus | undefined;
   const data = await prisma.jadwalDonor.findMany({
     where: status ? { status } : undefined,
-    include: { donor: { include: { user: { select: { name: true, phoneNum: true, city: true } } } } },
+    include: {
+      donor: { include: { user: { select: { name: true, phoneNum: true, city: true } } } },
+      pmi: { select: { pmiName: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
@@ -44,7 +48,6 @@ export async function updateSchedule(req: AuthedRequest, res: Response) {
   });
   if (!existing) return res.status(404).json({ error: "Jadwal tidak ditemukan" });
 
-  // Validasi reschedule butuh newDate
   if (parsed.data.status === "RESCHEDULED" && !parsed.data.newDate) {
     return res.status(400).json({ error: "newDate wajib untuk reschedule" });
   }
@@ -82,14 +85,14 @@ export async function updateSchedule(req: AuthedRequest, res: Response) {
   return res.json({ message: "Jadwal diperbarui", schedule: updated });
 }
 
-// ===== 3) List request darah (untuk admin escalation) =====
+// ===== 3) List request darah =====
 export async function listRequests(req: AuthedRequest, res: Response) {
   const status = req.query.status as string | undefined;
   const data = await prisma.permintaanDonor.findMany({
     where: status ? { reqStatus: status as any } : undefined,
     include: {
-      patient: { include: { user: { select: { name: true, city: true } } } },
-      hospital: { select: { hospitalName: true } },
+      patient: { include: { user: { select: { name: true, email: true, city: true } } } },
+      acceptedByPmi: { select: { pmiName: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -101,16 +104,16 @@ export async function listRequests(req: AuthedRequest, res: Response) {
 export async function listQuarantineStocks(_req: AuthedRequest, res: Response) {
   const data = await prisma.stokDarah.findMany({
     where: { status: "QUARANTINE" },
-    include: { hospital: { select: { hospitalName: true } } },
+    include: { pmi: { select: { pmiName: true } } },
     orderBy: { createdAt: "desc" },
   });
   return res.json({ data });
 }
 
-// ===== 4) List RS yang menunggu verifikasi =====
-export async function listHospitals(req: AuthedRequest, res: Response) {
-  const status = req.query.status as HospitalStatus | undefined;
-  const data = await prisma.rumahSakit.findMany({
+// ===== 4) List PMI yang menunggu verifikasi =====
+export async function listPmis(req: AuthedRequest, res: Response) {
+  const status = req.query.status as PmiStatus | undefined;
+  const data = await prisma.pMI.findMany({
     where: status ? { status } : undefined,
     include: { user: { select: { email: true, phoneNum: true, city: true } } },
     orderBy: { user: { createdAt: "desc" } },
@@ -118,25 +121,25 @@ export async function listHospitals(req: AuthedRequest, res: Response) {
   return res.json({ data });
 }
 
-// ===== 5) Verify / suspend RS =====
-const verifyHospitalSchema = z.object({
+// ===== 5) Verify / suspend PMI =====
+const verifyPmiSchema = z.object({
   status: z.enum(["VERIFIED", "SUSPENDED", "UNVERIFIED"]),
 });
 
-export async function verifyHospital(req: AuthedRequest, res: Response) {
-  const parsed = verifyHospitalSchema.safeParse(req.body);
+export async function verifyPmi(req: AuthedRequest, res: Response) {
+  const parsed = verifyPmiSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const existing = await prisma.rumahSakit.findUnique({
+  const existing = await prisma.pMI.findUnique({
     where: { id: req.params.id },
     include: { user: true },
   });
-  if (!existing) return res.status(404).json({ error: "RS tidak ditemukan" });
+  if (!existing) return res.status(404).json({ error: "PMI tidak ditemukan" });
 
-  const updated = await prisma.rumahSakit.update({
+  const updated = await prisma.pMI.update({
     where: { id: req.params.id },
     data: {
-      status: parsed.data.status as HospitalStatus,
+      status: parsed.data.status as PmiStatus,
       verifiedAt: parsed.data.status === "VERIFIED" ? new Date() : null,
       verifiedById: parsed.data.status === "VERIFIED" ? req.user!.id : null,
     },
@@ -145,7 +148,7 @@ export async function verifyHospital(req: AuthedRequest, res: Response) {
   await writeAudit({
     userId: req.user!.id,
     action: "STATUS_CHANGE",
-    entity: "RumahSakit",
+    entity: "PMI",
     entityId: existing.id,
     before: { status: existing.status },
     after: { status: updated.status },
@@ -156,11 +159,11 @@ export async function verifyHospital(req: AuthedRequest, res: Response) {
     userId: existing.userId,
     email: existing.user.email,
     type: NotificationType.ACCOUNT_VERIFICATION,
-    title: `Status Rumah Sakit: ${parsed.data.status}`,
+    title: `Status PMI: ${parsed.data.status}`,
     body: parsed.data.status === "VERIFIED"
-      ? "Akun RS Anda telah diverifikasi. Sekarang Anda bisa mengelola stok & request darah."
-      : `Status RS Anda diubah menjadi ${parsed.data.status}.`,
+      ? "Akun PMI Anda telah diverifikasi. Sekarang Anda bisa mengelola stok & request darah."
+      : `Status PMI Anda diubah menjadi ${parsed.data.status}.`,
   });
 
-  return res.json({ message: "Status RS diperbarui", hospital: updated });
+  return res.json({ message: "Status PMI diperbarui", pmi: updated });
 }

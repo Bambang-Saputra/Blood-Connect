@@ -6,10 +6,9 @@ import { writeAudit } from "../lib/audit";
 
 /**
  * Use Case: UPDATE STOCK & CHECK AVAILABILITY
- * Activity Diagram #12
  *
  * Catatan keamanan:
- *   - hospitalId selalu diambil dari session (req.user) — tidak menerima dari body
+ *   - pmiId selalu diambil dari session (req.user) — tidak menerima dari body
  *     untuk mencegah mass assignment
  *   - Default StockStatus = QUARANTINE — harus di-verify dulu baru AVAILABLE
  */
@@ -33,16 +32,16 @@ export async function createStock(req: AuthedRequest, res: Response) {
     return res.status(400).json({ error: "ExpiryDate harus di masa depan" });
   }
 
-  // Ambil hospitalId dari session — TIDAK pernah dari body
-  const rs = await prisma.rumahSakit.findUnique({ where: { userId: req.user!.id } });
-  if (!rs) return res.status(403).json({ error: "Hanya RS yang bisa menambah stok" });
-  if (rs.status !== "VERIFIED") {
-    return res.status(403).json({ error: "Akun RS belum diverifikasi admin" });
+  // Ambil pmiId dari session — TIDAK pernah dari body
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa menambah stok" });
+  if (pmi.status !== "VERIFIED") {
+    return res.status(403).json({ error: "Akun PMI belum diverifikasi admin" });
   }
 
   const stock = await prisma.stokDarah.create({
     data: {
-      hospitalId: rs.id,
+      pmiId: pmi.id,
       bloodType: parsed.data.bloodType,
       rhesusType: parsed.data.rhesusType,
       component: parsed.data.component,
@@ -116,7 +115,7 @@ export async function checkAvailability(req: AuthedRequest, res: Response) {
       quantity: true,
       expiryDate: true,
       location: true,
-      hospital: { select: { hospitalName: true, hospitalLoc: true } },
+      pmi: { select: { pmiName: true, pmiLoc: true } },
     },
   });
 
@@ -129,14 +128,49 @@ export async function checkAvailability(req: AuthedRequest, res: Response) {
   return res.json({ stocks, summary });
 }
 
-// Stok milik RS yang login
+// Stok milik PMI yang login
 export async function listMyStocks(req: AuthedRequest, res: Response) {
-  const rs = await prisma.rumahSakit.findUnique({ where: { userId: req.user!.id } });
-  if (!rs) return res.status(403).json({ error: "Hanya RS yang bisa lihat stok sendiri" });
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa lihat stok sendiri" });
 
   const stocks = await prisma.stokDarah.findMany({
-    where: { hospitalId: rs.id },
+    where: { pmiId: pmi.id },
     orderBy: { expiryDate: "asc" },
   });
   return res.json({ data: stocks });
+}
+
+/**
+ * GET /api/stocks/summary
+ * Agregat stok per golongan darah untuk chart di dashboard PMI.
+ * Hanya count stok AVAILABLE + belum expired milik PMI yang login.
+ * Format response cocok untuk recharts BarChart.
+ */
+export async function getStockSummary(req: AuthedRequest, res: Response) {
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa akses" });
+
+  const stocks = await prisma.stokDarah.findMany({
+    where: {
+      pmiId: pmi.id,
+      status: "AVAILABLE",
+      expiryDate: { gt: new Date() },
+    },
+    select: { bloodType: true, rhesusType: true, quantity: true },
+  });
+
+  // Build matrix 8 slot: A+, A-, B+, B-, AB+, AB-, O+, O-
+  const tally: Record<string, number> = {};
+  for (const bt of ["A", "B", "AB", "O"]) {
+    for (const rh of ["+", "-"]) {
+      tally[`${bt}${rh}`] = 0;
+    }
+  }
+  for (const s of stocks) {
+    const key = `${s.bloodType}${s.rhesusType === "POSITIVE" ? "+" : "-"}`;
+    tally[key] = (tally[key] ?? 0) + s.quantity;
+  }
+
+  const data = Object.entries(tally).map(([label, total]) => ({ label, total }));
+  return res.json({ data, totalAll: stocks.reduce((s, x) => s + x.quantity, 0) });
 }

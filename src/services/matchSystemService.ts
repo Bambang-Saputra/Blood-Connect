@@ -211,12 +211,14 @@ export async function matchDonorToRequest(requestId: string): Promise<MatchResul
     where: { id: requestId },
     include: {
       patient: { include: { user: true } },
-      hospital: { include: { user: true } },
+      acceptedByPmi: { include: { user: true } },
     },
   });
   if (!request) throw new Error("Request tidak ditemukan");
 
-  const targetUser = request.patient?.user ?? request.hospital?.user;
+  // Lokasi target untuk proximity match: prefer pasien (lokasi sebenarnya),
+  // fallback PMI yang accept (kalau ada).
+  const targetUser = request.patient?.user ?? request.acceptedByPmi?.user;
   const targetCity = targetUser?.city ?? null;
   const targetProvince = targetUser?.province ?? null;
   const targetZone = targetUser?.zone ?? null;
