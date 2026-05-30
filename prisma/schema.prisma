@@ -1,12 +1,12 @@
 // =====================================================================
-// BLOOD CONNECT - Database Schema (v2 - Medical Workflow)
+// BLOOD CONNECT - Database Schema (v3 - PMI as central blood bank)
 // =====================================================================
-// Skema lengkap dengan workflow medis:
-//   - PemeriksaanDonor: pemeriksaan fisik (Hb, BP, BB) time-series
-//   - ScreeningAnswer: kuesioner pre-donor (riwayat penyakit, perilaku)
-//   - BloodComponent enum: Whole Blood, PRC, FFP, TC (shelf life beda)
-//   - AuditLog: jejak perubahan data stok & request (compliance)
-//   - RS verification: admin harus approve sebelum RS bisa transact
+// Perubahan vs v2:
+//   - Rebrand RumahSakit → PMI (Palang Merah Indonesia / UTD)
+//   - JadwalDonor scoped per PMI (donor pilih PMI saat schedule)
+//   - PermintaanDonor: target hospital free-text, broadcast ke semua PMI
+//   - PemeriksaanDonor: scoped per PMI (cek fisik dilakukan di PMI)
+//   - Eligibility: dihitung saat PMI selesai input checkup
 // =====================================================================
 
 generator client {
@@ -25,7 +25,7 @@ datasource db {
 enum Role {
   PENDONOR
   PASIEN
-  RUMAH_SAKIT
+  PMI
   ADMIN
 }
 
@@ -41,13 +41,12 @@ enum RhesusType {
   NEGATIVE
 }
 
-// Komponen darah dengan shelf life berbeda
 enum BloodComponent {
-  WHOLE_BLOOD   // 35-42 hari
-  PRC           // Packed Red Cells — 42 hari
-  FFP           // Fresh Frozen Plasma — 1 tahun beku
-  TC            // Thrombocyte Concentrate — 5 hari
-  CRYO          // Cryoprecipitate — 1 tahun beku
+  WHOLE_BLOOD
+  PRC
+  FFP
+  TC
+  CRYO
 }
 
 enum RequestStatus {
@@ -55,7 +54,7 @@ enum RequestStatus {
   PROCESSING
   MATCHED_STOCK
   MATCHED_DONOR
-  IN_TRANSIT       // darah sedang diantar
+  IN_TRANSIT
   FULFILLED
   REJECTED
   CANCELLED
@@ -66,7 +65,7 @@ enum StockStatus {
   RESERVED
   EXPIRED
   USED
-  QUARANTINE       // belum lolos uji
+  QUARANTINE
 }
 
 enum ScheduleStatus {
@@ -78,9 +77,9 @@ enum ScheduleStatus {
   CANCELLED
 }
 
-enum HospitalStatus {
-  UNVERIFIED       // baru daftar, menunggu admin
-  VERIFIED         // disetujui admin, bisa transact
+enum PmiStatus {
+  UNVERIFIED
+  VERIFIED
   SUSPENDED
 }
 
@@ -112,19 +111,19 @@ model User {
   phoneNum    String
   address     String?
   city        String
-  province    String?       // Provinsi (untuk matching loose)
-  zone        String?       // Regional zone (Jabodetabek, Bandung Raya, dll)
-  birthDate   DateTime?     // wajib untuk validasi usia donor (17-65)
+  province    String?
+  zone        String?
+  birthDate   DateTime?
   role        Role
   isBlocked   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  pendonor    Pendonor?
-  pasien      Pasien?
-  rumahSakit  RumahSakit?
+  pendonor      Pendonor?
+  pasien        Pasien?
+  pmi           PMI?
   notifications Notification[]
-  auditLogs   AuditLog[]
+  auditLogs     AuditLog[]
 
   @@index([city])
   @@index([province])
@@ -142,12 +141,16 @@ model Pendonor {
 
   bloodType         BloodType
   rhesusType        RhesusType
-  weight            Float?              // kg — wajib ≥45 kg
+  weight            Float?
   lastDonationDate  DateTime?
   isActive          Boolean     @default(true)
   isEligible        Boolean     @default(false)
   eligibilityReason String?
   totalDonations    Int         @default(0)
+
+  // Optional: PMI default pilihan donor (untuk future broadcast PMI→donor)
+  preferredPmiId    String?
+  preferredPmi      PMI?        @relation("DonorPreferredPMI", fields: [preferredPmiId], references: [id])
 
   schedules         JadwalDonor[]
   history           DonorHistory[]
@@ -156,31 +159,38 @@ model Pendonor {
   screenings        ScreeningAnswer[]
 
   @@index([bloodType, rhesusType, isEligible])
+  @@index([preferredPmiId])
 }
 
 // ---------------------------------------------------------------------
-// PEMERIKSAAN DONOR — Hb/BP/BB time-series (HARUS diisi sebelum donor)
+// PEMERIKSAAN DONOR — cek fisik dilakukan di PMI
 // ---------------------------------------------------------------------
 model PemeriksaanDonor {
   id                  String   @id @default(cuid())
   donorId             String
   donor               Pendonor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  pmiId               String?
+  pmi                 PMI?     @relation(fields: [pmiId], references: [id])
   examinedAt          DateTime @default(now())
-  examinedBy          String?           // nakes / nurse ID
-  hemoglobinLevel     Float             // g/dL
-  systolicBP          Int               // mmHg — atas
-  diastolicBP         Int               // mmHg — bawah
-  bodyTempC           Float             // suhu Celsius
-  pulseRate           Int               // BPM
-  weight              Float             // kg saat pemeriksaan
+  examinedBy          String?
+  hemoglobinLevel     Float
+  systolicBP          Int
+  diastolicBP         Int
+  bodyTempC           Float
+  pulseRate           Int
+  weight              Float
   notes               String?
-  passed              Boolean           // hasil overall lolos / tidak
+  passed              Boolean
+
+  // Reverse relation: 1 checkup mungkin terkait dengan 1 jadwal donor
+  jadwal              JadwalDonor?
 
   @@index([donorId, examinedAt])
+  @@index([pmiId, examinedAt])
 }
 
 // ---------------------------------------------------------------------
-// SCREENING ANSWER — kuesioner pra-donor (riwayat penyakit, perilaku)
+// SCREENING ANSWER — kuesioner pre-donor (diisi donor sendiri)
 // ---------------------------------------------------------------------
 model ScreeningAnswer {
   id            String   @id @default(cuid())
@@ -188,18 +198,20 @@ model ScreeningAnswer {
   donor         Pendonor @relation(fields: [donorId], references: [id], onDelete: Cascade)
   answeredAt    DateTime @default(now())
 
-  // Pertanyaan standar PMI
-  hasFever              Boolean @default(false)   // demam 7 hari terakhir
-  recentSurgery         Boolean @default(false)   // operasi 6 bulan terakhir
-  recentTattoo          Boolean @default(false)   // tato/tindik 6 bulan
+  hasFever              Boolean @default(false)
+  recentSurgery         Boolean @default(false)
+  recentTattoo          Boolean @default(false)
   isPregnantOrLactating Boolean @default(false)
   onMedication          Boolean @default(false)
   hasHIVOrHepatitis     Boolean @default(false)
   riskySexualBehavior   Boolean @default(false)
-  recentVaccination     Boolean @default(false)   // vaksin 2 minggu
+  recentVaccination     Boolean @default(false)
   details               String?
 
-  passed        Boolean  // false jika ada flag berisiko
+  passed        Boolean
+
+  // Reverse relation: 1 screening bisa dipakai 1 jadwal
+  jadwal        JadwalDonor?
 }
 
 // ---------------------------------------------------------------------
@@ -210,38 +222,39 @@ model Pasien {
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   nik         String?  @unique
-  // Note: bloodType pasien tidak disimpan di sini — bisa request darah untuk
-  // anggota keluarga dengan golongan beda. Tetap di PermintaanDonor.
 
   requests    PermintaanDonor[]
 }
 
 // ---------------------------------------------------------------------
-// RUMAH SAKIT — dengan verifikasi admin
+// PMI — pusat blood bank (was RumahSakit)
 // ---------------------------------------------------------------------
-model RumahSakit {
+model PMI {
   id            String         @id @default(cuid())
   userId        String         @unique
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hospitalName  String
-  hospitalCode  String         @unique
-  hospitalLoc   String
-  status        HospitalStatus @default(UNVERIFIED)
+  pmiName       String
+  pmiCode       String         @unique
+  pmiLoc        String
+  status        PmiStatus      @default(UNVERIFIED)
   verifiedAt    DateTime?
-  verifiedById  String?         // user.id admin yang approve
-  licenseDoc    String?         // URL upload SIUP/izin RS
+  verifiedById  String?
+  licenseDoc    String?
 
-  stocks        StokDarah[]
-  requests      PermintaanDonor[]
+  stocks            StokDarah[]
+  acceptedRequests  PermintaanDonor[]   @relation("RequestAcceptedByPMI")
+  schedules         JadwalDonor[]
+  examinations      PemeriksaanDonor[]
+  donorPreferences  Pendonor[]          @relation("DonorPreferredPMI")
 }
 
 // ---------------------------------------------------------------------
-// STOK DARAH — per-batch dengan komponen darah
+// STOK DARAH — per-batch, dimiliki PMI
 // ---------------------------------------------------------------------
 model StokDarah {
   id            String         @id @default(cuid())
-  hospitalId    String
-  hospital      RumahSakit     @relation(fields: [hospitalId], references: [id])
+  pmiId         String
+  pmi           PMI            @relation(fields: [pmiId], references: [id])
 
   bloodType     BloodType
   rhesusType    RhesusType
@@ -249,9 +262,9 @@ model StokDarah {
   quantity      Int
   expiryDate    DateTime
   location      String
-  status        StockStatus    @default(QUARANTINE)  // default karantina, lolos uji baru AVAILABLE
-  source        String?                              // donor ID / impor
-  donorId       String?                              // jika berasal dari pendonor specific
+  status        StockStatus    @default(QUARANTINE)
+  source        String?
+  donorId       String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -259,25 +272,34 @@ model StokDarah {
 
   @@index([bloodType, rhesusType, component, status, expiryDate])
   @@index([location])
+  @@index([pmiId])
 }
 
 // ---------------------------------------------------------------------
-// PERMINTAAN DONOR
+// PERMINTAAN DONOR — broadcast ke SEMUA PMI
 // ---------------------------------------------------------------------
 model PermintaanDonor {
-  id            String         @id @default(cuid())
-  patientId     String?
-  patient       Pasien?        @relation(fields: [patientId], references: [id])
-  hospitalId    String?
-  hospital      RumahSakit?    @relation(fields: [hospitalId], references: [id])
+  id                    String         @id @default(cuid())
+  patientId             String?
+  patient               Pasien?        @relation(fields: [patientId], references: [id])
+
+  // Target RS tempat pasien dirawat (free-text — bukan relation ke PMI)
+  targetHospitalName    String
+  targetHospitalAddress String?
+
+  // PMI yang accept request (null kalau masih PENDING / broadcast)
+  acceptedByPmiId       String?
+  acceptedByPmi         PMI?           @relation("RequestAcceptedByPMI", fields: [acceptedByPmiId], references: [id])
 
   bloodType     BloodType
   rhesusType    RhesusType
   component     BloodComponent @default(WHOLE_BLOOD)
   quantity      Int
-  urgency       String         @default("NORMAL")   // NORMAL | URGENT | CRITICAL
+  // urgency: KEEP di DB tapi NOT input dari pasien.
+  // Server compute saat read berdasarkan total stok PMI untuk golongan ini.
+  urgency       String         @default("NORMAL")
   reason        String?
-  doctorName    String?                             // dokter yang request
+  doctorName    String?
   reqStatus     RequestStatus  @default(PENDING)
   createdAt     DateTime       @default(now())
   fulfilledAt   DateTime?
@@ -287,6 +309,7 @@ model PermintaanDonor {
 
   @@index([reqStatus, createdAt])
   @@index([bloodType, rhesusType, component])
+  @@index([acceptedByPmiId])
 }
 
 // ---------------------------------------------------------------------
@@ -305,35 +328,52 @@ model StockAllocation {
 }
 
 // ---------------------------------------------------------------------
-// JADWAL DONOR
+// JADWAL DONOR — scoped per PMI
 // ---------------------------------------------------------------------
 model JadwalDonor {
   id          String         @id @default(cuid())
   donorId     String
   donor       Pendonor       @relation(fields: [donorId], references: [id])
+  pmiId       String
+  pmi         PMI            @relation(fields: [pmiId], references: [id])
   jadwal      DateTime
   sesi        String
   status      ScheduleStatus @default(PENDING)
   newDate     DateTime?
   note        String?
+
+  // Resume skrining donor yang dipakai untuk jadwal ini
+  screeningId String?        @unique
+  screening   ScreeningAnswer? @relation(fields: [screeningId], references: [id])
+
+  // Hasil cek fisik PMI untuk jadwal ini
+  checkupId   String?        @unique
+  checkup     PemeriksaanDonor? @relation(fields: [checkupId], references: [id])
+
+  // Eligibility evaluation: null = belum dicek, true/false setelah PMI input checkup
+  isEligible        Boolean?
+  eligibilityReason String?
+
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   @@index([jadwal, status])
+  @@index([pmiId, status])
+  @@index([donorId, status])
 }
 
 // ---------------------------------------------------------------------
 // DONOR HISTORY
 // ---------------------------------------------------------------------
 model DonorHistory {
-  id          String         @id @default(cuid())
-  donorId     String
-  donor       Pendonor       @relation(fields: [donorId], references: [id])
-  donationDate DateTime      @default(now())
-  location    String
-  volumeMl    Int            @default(450)
-  component   BloodComponent @default(WHOLE_BLOOD)
-  note        String?
+  id           String         @id @default(cuid())
+  donorId      String
+  donor        Pendonor       @relation(fields: [donorId], references: [id])
+  donationDate DateTime       @default(now())
+  location     String
+  volumeMl     Int            @default(450)
+  component    BloodComponent @default(WHOLE_BLOOD)
+  note         String?
 
   @@index([donorId, donationDate])
 }
@@ -374,14 +414,14 @@ model Notification {
 }
 
 // ---------------------------------------------------------------------
-// AUDIT LOG — compliance (UU PDP / regulasi medis)
+// AUDIT LOG
 // ---------------------------------------------------------------------
 model AuditLog {
   id          String      @id @default(cuid())
-  userId      String?              // siapa yang melakukan aksi (null = system)
+  userId      String?
   user        User?       @relation(fields: [userId], references: [id])
   action      AuditAction
-  entity      String               // "StokDarah" | "PermintaanDonor" | dll
+  entity      String
   entityId    String
   before      Json?
   after       Json?

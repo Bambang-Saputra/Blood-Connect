@@ -40,12 +40,12 @@ export async function runStockExpiryCheck() {
       status: StockStatus.AVAILABLE,
       expiryDate: { gte: new Date(), lt: threeDays },
     },
-    include: { hospital: { include: { user: true } } },
+    include: { pmi: { include: { user: true } } },
   });
 
   for (const batch of soonExpire) {
     await notifyUser({
-      userId: batch.hospital.userId,
+      userId: batch.pmi.userId,
       type: NotificationType.STOCK_ALERT,
       title: "⚠️ Stok Darah Akan Kadaluarsa",
       body: `Batch ${batch.bloodType}${

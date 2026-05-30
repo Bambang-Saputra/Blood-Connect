@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('PENDONOR', 'PASIEN', 'RUMAH_SAKIT', 'ADMIN');
+CREATE TYPE "Role" AS ENUM ('PENDONOR', 'PASIEN', 'PMI', 'ADMIN');
 
 -- CreateEnum
 CREATE TYPE "BloodType" AS ENUM ('A', 'B', 'AB', 'O');
@@ -20,7 +20,7 @@ CREATE TYPE "StockStatus" AS ENUM ('AVAILABLE', 'RESERVED', 'EXPIRED', 'USED', '
 CREATE TYPE "ScheduleStatus" AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED', 'RESCHEDULED', 'COMPLETED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "HospitalStatus" AS ENUM ('UNVERIFIED', 'VERIFIED', 'SUSPENDED');
+CREATE TYPE "PmiStatus" AS ENUM ('UNVERIFIED', 'VERIFIED', 'SUSPENDED');
 
 -- CreateEnum
 CREATE TYPE "NotificationType" AS ENUM ('ELIGIBLE_DONOR_REQUEST', 'REQUEST_STATUS_UPDATE', 'SCHEDULE_UPDATE', 'STOCK_ALERT', 'ACCOUNT_VERIFICATION', 'GENERIC');
@@ -37,6 +37,8 @@ CREATE TABLE "User" (
     "phoneNum" TEXT NOT NULL,
     "address" TEXT,
     "city" TEXT NOT NULL,
+    "province" TEXT,
+    "zone" TEXT,
     "birthDate" TIMESTAMP(3),
     "role" "Role" NOT NULL,
     "isBlocked" BOOLEAN NOT NULL DEFAULT false,
@@ -58,6 +60,7 @@ CREATE TABLE "Pendonor" (
     "isEligible" BOOLEAN NOT NULL DEFAULT false,
     "eligibilityReason" TEXT,
     "totalDonations" INTEGER NOT NULL DEFAULT 0,
+    "preferredPmiId" TEXT,
 
     CONSTRAINT "Pendonor_pkey" PRIMARY KEY ("id")
 );
@@ -66,6 +69,7 @@ CREATE TABLE "Pendonor" (
 CREATE TABLE "PemeriksaanDonor" (
     "id" TEXT NOT NULL,
     "donorId" TEXT NOT NULL,
+    "pmiId" TEXT,
     "examinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "examinedBy" TEXT,
     "hemoglobinLevel" DOUBLE PRECISION NOT NULL,
@@ -109,24 +113,24 @@ CREATE TABLE "Pasien" (
 );
 
 -- CreateTable
-CREATE TABLE "RumahSakit" (
+CREATE TABLE "PMI" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "hospitalName" TEXT NOT NULL,
-    "hospitalCode" TEXT NOT NULL,
-    "hospitalLoc" TEXT NOT NULL,
-    "status" "HospitalStatus" NOT NULL DEFAULT 'UNVERIFIED',
+    "pmiName" TEXT NOT NULL,
+    "pmiCode" TEXT NOT NULL,
+    "pmiLoc" TEXT NOT NULL,
+    "status" "PmiStatus" NOT NULL DEFAULT 'UNVERIFIED',
     "verifiedAt" TIMESTAMP(3),
     "verifiedById" TEXT,
     "licenseDoc" TEXT,
 
-    CONSTRAINT "RumahSakit_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "PMI_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "StokDarah" (
     "id" TEXT NOT NULL,
-    "hospitalId" TEXT NOT NULL,
+    "pmiId" TEXT NOT NULL,
     "bloodType" "BloodType" NOT NULL,
     "rhesusType" "RhesusType" NOT NULL,
     "component" "BloodComponent" NOT NULL DEFAULT 'WHOLE_BLOOD',
@@ -146,7 +150,9 @@ CREATE TABLE "StokDarah" (
 CREATE TABLE "PermintaanDonor" (
     "id" TEXT NOT NULL,
     "patientId" TEXT,
-    "hospitalId" TEXT,
+    "targetHospitalName" TEXT NOT NULL,
+    "targetHospitalAddress" TEXT,
+    "acceptedByPmiId" TEXT,
     "bloodType" "BloodType" NOT NULL,
     "rhesusType" "RhesusType" NOT NULL,
     "component" "BloodComponent" NOT NULL DEFAULT 'WHOLE_BLOOD',
@@ -176,11 +182,16 @@ CREATE TABLE "StockAllocation" (
 CREATE TABLE "JadwalDonor" (
     "id" TEXT NOT NULL,
     "donorId" TEXT NOT NULL,
+    "pmiId" TEXT NOT NULL,
     "jadwal" TIMESTAMP(3) NOT NULL,
     "sesi" TEXT NOT NULL,
     "status" "ScheduleStatus" NOT NULL DEFAULT 'PENDING',
     "newDate" TIMESTAMP(3),
     "note" TEXT,
+    "screeningId" TEXT,
+    "checkupId" TEXT,
+    "isEligible" BOOLEAN,
+    "eligibilityReason" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -249,6 +260,12 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE INDEX "User_city_idx" ON "User"("city");
 
 -- CreateIndex
+CREATE INDEX "User_province_idx" ON "User"("province");
+
+-- CreateIndex
+CREATE INDEX "User_zone_idx" ON "User"("zone");
+
+-- CreateIndex
 CREATE INDEX "User_role_idx" ON "User"("role");
 
 -- CreateIndex
@@ -258,7 +275,13 @@ CREATE UNIQUE INDEX "Pendonor_userId_key" ON "Pendonor"("userId");
 CREATE INDEX "Pendonor_bloodType_rhesusType_isEligible_idx" ON "Pendonor"("bloodType", "rhesusType", "isEligible");
 
 -- CreateIndex
+CREATE INDEX "Pendonor_preferredPmiId_idx" ON "Pendonor"("preferredPmiId");
+
+-- CreateIndex
 CREATE INDEX "PemeriksaanDonor_donorId_examinedAt_idx" ON "PemeriksaanDonor"("donorId", "examinedAt");
+
+-- CreateIndex
+CREATE INDEX "PemeriksaanDonor_pmiId_examinedAt_idx" ON "PemeriksaanDonor"("pmiId", "examinedAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Pasien_userId_key" ON "Pasien"("userId");
@@ -267,10 +290,10 @@ CREATE UNIQUE INDEX "Pasien_userId_key" ON "Pasien"("userId");
 CREATE UNIQUE INDEX "Pasien_nik_key" ON "Pasien"("nik");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RumahSakit_userId_key" ON "RumahSakit"("userId");
+CREATE UNIQUE INDEX "PMI_userId_key" ON "PMI"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RumahSakit_hospitalCode_key" ON "RumahSakit"("hospitalCode");
+CREATE UNIQUE INDEX "PMI_pmiCode_key" ON "PMI"("pmiCode");
 
 -- CreateIndex
 CREATE INDEX "StokDarah_bloodType_rhesusType_component_status_expiryDate_idx" ON "StokDarah"("bloodType", "rhesusType", "component", "status", "expiryDate");
@@ -279,16 +302,34 @@ CREATE INDEX "StokDarah_bloodType_rhesusType_component_status_expiryDate_idx" ON
 CREATE INDEX "StokDarah_location_idx" ON "StokDarah"("location");
 
 -- CreateIndex
+CREATE INDEX "StokDarah_pmiId_idx" ON "StokDarah"("pmiId");
+
+-- CreateIndex
 CREATE INDEX "PermintaanDonor_reqStatus_createdAt_idx" ON "PermintaanDonor"("reqStatus", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "PermintaanDonor_bloodType_rhesusType_component_idx" ON "PermintaanDonor"("bloodType", "rhesusType", "component");
 
 -- CreateIndex
+CREATE INDEX "PermintaanDonor_acceptedByPmiId_idx" ON "PermintaanDonor"("acceptedByPmiId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "StockAllocation_requestId_stockId_key" ON "StockAllocation"("requestId", "stockId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "JadwalDonor_screeningId_key" ON "JadwalDonor"("screeningId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "JadwalDonor_checkupId_key" ON "JadwalDonor"("checkupId");
+
+-- CreateIndex
 CREATE INDEX "JadwalDonor_jadwal_status_idx" ON "JadwalDonor"("jadwal", "status");
+
+-- CreateIndex
+CREATE INDEX "JadwalDonor_pmiId_status_idx" ON "JadwalDonor"("pmiId", "status");
+
+-- CreateIndex
+CREATE INDEX "JadwalDonor_donorId_status_idx" ON "JadwalDonor"("donorId", "status");
 
 -- CreateIndex
 CREATE INDEX "DonorHistory_donorId_donationDate_idx" ON "DonorHistory"("donorId", "donationDate");
@@ -312,7 +353,13 @@ CREATE INDEX "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt"
 ALTER TABLE "Pendonor" ADD CONSTRAINT "Pendonor_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Pendonor" ADD CONSTRAINT "Pendonor_preferredPmiId_fkey" FOREIGN KEY ("preferredPmiId") REFERENCES "PMI"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "PemeriksaanDonor" ADD CONSTRAINT "PemeriksaanDonor_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PemeriksaanDonor" ADD CONSTRAINT "PemeriksaanDonor_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "PMI"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ScreeningAnswer" ADD CONSTRAINT "ScreeningAnswer_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -321,16 +368,16 @@ ALTER TABLE "ScreeningAnswer" ADD CONSTRAINT "ScreeningAnswer_donorId_fkey" FORE
 ALTER TABLE "Pasien" ADD CONSTRAINT "Pasien_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "RumahSakit" ADD CONSTRAINT "RumahSakit_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PMI" ADD CONSTRAINT "PMI_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "StokDarah" ADD CONSTRAINT "StokDarah_hospitalId_fkey" FOREIGN KEY ("hospitalId") REFERENCES "RumahSakit"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "StokDarah" ADD CONSTRAINT "StokDarah_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "PMI"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "PermintaanDonor" ADD CONSTRAINT "PermintaanDonor_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Pasien"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PermintaanDonor" ADD CONSTRAINT "PermintaanDonor_hospitalId_fkey" FOREIGN KEY ("hospitalId") REFERENCES "RumahSakit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "PermintaanDonor" ADD CONSTRAINT "PermintaanDonor_acceptedByPmiId_fkey" FOREIGN KEY ("acceptedByPmiId") REFERENCES "PMI"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "StockAllocation" ADD CONSTRAINT "StockAllocation_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "PermintaanDonor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -340,6 +387,15 @@ ALTER TABLE "StockAllocation" ADD CONSTRAINT "StockAllocation_stockId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "PMI"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_screeningId_fkey" FOREIGN KEY ("screeningId") REFERENCES "ScreeningAnswer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "JadwalDonor" ADD CONSTRAINT "JadwalDonor_checkupId_fkey" FOREIGN KEY ("checkupId") REFERENCES "PemeriksaanDonor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "DonorHistory" ADD CONSTRAINT "DonorHistory_donorId_fkey" FOREIGN KEY ("donorId") REFERENCES "Pendonor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -355,3 +411,4 @@ ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+

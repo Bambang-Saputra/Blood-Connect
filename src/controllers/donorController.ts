@@ -10,10 +10,12 @@ import { notifyUser } from "../lib/notification";
  * CONTROLLER: Pendonor
  *   POST  /api/donor/check-eligible           — Use Case CHECKELIGIBLE
  *   POST  /api/donor/schedules                — Use Case DAFTAR DONOR
+ *   GET   /api/donor/schedules                — List jadwal sendiri
  *   GET   /api/donor/history                  — Use Case HISTORY
  *   GET   /api/donor/notifications            — list permintaan dari MatchSystem
  *   POST  /api/donor/notifications/:id/respond
  *   GET   /api/donor/me                       — info pendonor + status
+ *   PATCH /api/donor/me/preferred-pmi         — set/ubah PMI preferensi
  */
 
 export async function checkEligibleHandler(req: AuthedRequest, res: Response) {
@@ -24,7 +26,12 @@ export async function checkEligibleHandler(req: AuthedRequest, res: Response) {
   return res.json(result);
 }
 
+// =====================================================================
+// POST /api/donor/schedules
+// Donor pilih PMI + tanggal — schedule scoped ke PMI tersebut.
+// =====================================================================
 const scheduleSchema = z.object({
+  pmiId: z.string().min(1, "PMI wajib dipilih"),
   jadwal: z.string().datetime(),
   sesi: z.enum(["PAGI", "SIANG", "SORE"]),
 });
@@ -33,26 +40,59 @@ export async function createSchedule(req: AuthedRequest, res: Response) {
   const parsed = scheduleSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  const donor = await prisma.pendonor.findUnique({
+    where: { userId: req.user!.id },
+    include: { screenings: { orderBy: { answeredAt: "desc" }, take: 1 } },
+  });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
-  if (!donor.isEligible) {
+  // Validasi PMI ada dan VERIFIED
+  const pmi = await prisma.pMI.findUnique({ where: { id: parsed.data.pmiId } });
+  if (!pmi) return res.status(400).json({ error: "PMI tidak ditemukan" });
+  if (pmi.status !== "VERIFIED") {
+    return res.status(400).json({ error: "PMI belum diverifikasi" });
+  }
+
+  // Skrining wajib diisi dulu sebelum daftar jadwal
+  const latestScreening = donor.screenings[0];
+  if (!latestScreening) {
     return res.status(400).json({
-      error: "Pendaftaran ditolak. Lakukan checkEligible dahulu.",
-      reason: donor.eligibilityReason,
+      error: "Anda perlu mengisi kuesioner skrining dulu sebelum daftar jadwal donor.",
     });
   }
 
   const schedule = await prisma.jadwalDonor.create({
     data: {
       donorId: donor.id,
+      pmiId: parsed.data.pmiId,
       jadwal: new Date(parsed.data.jadwal),
       sesi: parsed.data.sesi,
       status: ScheduleStatus.PENDING,
+      screeningId: latestScreening.id,
     },
   });
 
-  return res.status(201).json({ message: "Pendaftaran berhasil, menunggu konfirmasi admin", schedule });
+  return res.status(201).json({
+    message: "Pendaftaran jadwal donor berhasil. PMI akan melakukan cek fisik saat hari H.",
+    schedule,
+  });
+}
+
+// GET /api/donor/schedules — list jadwal milik donor sendiri
+export async function listMySchedules(req: AuthedRequest, res: Response) {
+  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  const schedules = await prisma.jadwalDonor.findMany({
+    where: { donorId: donor.id },
+    include: {
+      pmi: { select: { pmiName: true, pmiLoc: true } },
+      checkup: true,
+      screening: true,
+    },
+    orderBy: { jadwal: "desc" },
+  });
+  return res.json({ data: schedules });
 }
 
 export async function getDonorHistory(req: AuthedRequest, res: Response) {
@@ -101,7 +141,6 @@ export async function respondNotification(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
-  // Path param :id di sini = requestId (sesuai route /donor/notifications/:id/respond)
   const notif = await prisma.donorNotification.findUnique({
     where: { donorId_requestId: { donorId: donor.id, requestId: req.params.id } },
     include: { request: { include: { patient: { include: { user: true } } } } },
@@ -137,10 +176,6 @@ export async function listOpenRequests(req: AuthedRequest, res: Response) {
   });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
-  // Pasien yang bisa diterima darah donor (recipient → donor compatibility reverse)
-  // Donor O+ bisa donor ke: O+, A+, B+, AB+
-  // Donor O- bisa donor ke: semua
-  // Untuk simplicity, kita tampilkan request yang golongannya SAMA atau donor bisa donor ke-nya
   const COMPAT_DONOR_TO_RECIPIENT: Record<string, string[]> = {
     "O-":  ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"],
     "O+":  ["O+", "A+", "B+", "AB+"],
@@ -166,13 +201,12 @@ export async function listOpenRequests(req: AuthedRequest, res: Response) {
     },
     include: {
       patient: { include: { user: { select: { name: true, city: true, province: true, zone: true } } } },
-      hospital: { select: { hospitalName: true, hospitalLoc: true } },
+      acceptedByPmi: { select: { pmiName: true, pmiLoc: true } },
     },
     orderBy: [{ urgency: "desc" }, { createdAt: "desc" }],
     take: 30,
   });
 
-  // Hitung "kedekatan" sederhana untuk sorting client-side
   const withProximity = requests.map((r) => {
     const reqCity = r.patient?.user?.city ?? null;
     const reqProvince = r.patient?.user?.province ?? null;
@@ -188,7 +222,6 @@ export async function listOpenRequests(req: AuthedRequest, res: Response) {
 }
 
 // POST /api/donor/volunteer/:requestId
-// Donor proaktif menyatakan kesediaan untuk request yang belum ditargetkan ke dia
 export async function volunteerForRequest(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
@@ -202,7 +235,6 @@ export async function volunteerForRequest(req: AuthedRequest, res: Response) {
   });
   if (!request) return res.status(404).json({ error: "Request tidak ditemukan" });
 
-  // Cek apakah sudah ada notification (jangan duplicate)
   const existing = await prisma.donorNotification.findUnique({
     where: { donorId_requestId: { donorId: donor.id, requestId: request.id } },
   });
@@ -220,7 +252,6 @@ export async function volunteerForRequest(req: AuthedRequest, res: Response) {
     },
   });
 
-  // Notifikasi pasien
   if (request.patient) {
     await notifyUser({
       userId: request.patient.userId,
@@ -240,10 +271,31 @@ export async function getMe(req: AuthedRequest, res: Response) {
     where: { userId: req.user!.id },
     include: {
       user: { select: { name: true, email: true, city: true, birthDate: true } },
+      preferredPmi: { select: { id: true, pmiName: true, pmiLoc: true } },
       checkups: { orderBy: { examinedAt: "desc" }, take: 1 },
       screenings: { orderBy: { answeredAt: "desc" }, take: 1 },
     },
   });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
   return res.json(donor);
+}
+
+// PATCH /api/donor/me/preferred-pmi
+const preferredPmiSchema = z.object({ preferredPmiId: z.string().min(1) });
+export async function updatePreferredPmi(req: AuthedRequest, res: Response) {
+  const parsed = preferredPmiSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  const pmi = await prisma.pMI.findUnique({ where: { id: parsed.data.preferredPmiId } });
+  if (!pmi) return res.status(400).json({ error: "PMI tidak ditemukan" });
+  if (pmi.status !== "VERIFIED") return res.status(400).json({ error: "PMI belum diverifikasi" });
+
+  await prisma.pendonor.update({
+    where: { id: donor.id },
+    data: { preferredPmiId: parsed.data.preferredPmiId },
+  });
+  return res.json({ message: "PMI preferensi diperbarui", pmiName: pmi.pmiName });
 }
