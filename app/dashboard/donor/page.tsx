@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { toast } from "../../lib/toast";
@@ -19,7 +19,6 @@ import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
  *   5. Pantau notifikasi MatchSystem (permintaan darah dari pasien)
  */
 
-type Eligibility = { eligible: boolean; reasons: string[]; missingData?: string[]; checkedAt: string };
 type Me = {
   id: string; bloodType: string; rhesusType: string;
   isEligible: boolean; eligibilityReason?: string;
@@ -33,25 +32,73 @@ type Notif = {
 
 export default function DonorDashboard() {
   const [me, setMe] = useState<Me | null>(null);
-  const [eligibility, setEligibility] = useState<Eligibility | null>(null);
+  const [authMe, setAuthMe] = useState<any>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [openRequests, setOpenRequests] = useState<any[]>([]);
+  const [pmiList, setPmiList] = useState<any[]>([]);
+  const [mySchedules, setMySchedules] = useState<any[]>([]);
+  const [scheduleForm, setScheduleForm] = useState({ pmiId: "", jadwal: "", sesi: "PAGI" });
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
-    const [meRes, notifRes, histRes, openRes] = await Promise.all([
+    const [meRes, authRes, notifRes, histRes, openRes, pmiRes, schedulesRes] = await Promise.all([
       api("/donor/me").then((r) => r.json()).catch(() => null),
+      api("/auth/me").then((r) => r.json()).catch(() => null),
       api("/donor/notifications").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/donor/history").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/donor/open-requests").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/pmi/list").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/donor/schedules").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     setMe(meRes);
+    setAuthMe(authRes);
     setNotifs(notifRes.data ?? []);
     setHistory(histRes.data ?? []);
     setOpenRequests(openRes.data ?? []);
+    setPmiList(pmiRes.data ?? []);
+    setMySchedules(schedulesRes.data ?? []);
+  }
+
+  // Sort PMI by proximity ke user (city > zone > province > nasional)
+  const sortedPmis = useMemo(() => {
+    if (!authMe) return pmiList;
+    return [...pmiList].sort((a, b) => {
+      const score = (p: any) =>
+        p.user?.city === authMe.city ? 3 :
+        p.user?.zone === authMe.zone ? 2 :
+        p.user?.province === authMe.province ? 1 : 0;
+      return score(b) - score(a);
+    });
+  }, [pmiList, authMe]);
+
+  async function submitSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!scheduleForm.pmiId) { toast.error("Pilih PMI dulu"); return; }
+    if (!scheduleForm.jadwal) { toast.error("Pilih tanggal jadwal"); return; }
+    setSubmitting(true);
+    const res = await api("/donor/schedules", {
+      method: "POST",
+      body: JSON.stringify({
+        pmiId: scheduleForm.pmiId,
+        jadwal: new Date(scheduleForm.jadwal).toISOString(),
+        sesi: scheduleForm.sesi,
+      }),
+    });
+    const data = await res.json();
+    setSubmitting(false);
+    if (res.ok) {
+      toast.success(data.message);
+      setShowScheduleForm(false);
+      setScheduleForm({ pmiId: "", jadwal: "", sesi: "PAGI" });
+      refresh();
+    } else {
+      toast.error(typeof data.error === "string" ? data.error : "Gagal daftar jadwal");
+    }
   }
 
   async function volunteer(requestId: string) {
@@ -60,14 +107,6 @@ export default function DonorDashboard() {
     const data = await res.json();
     if (res.ok) { toast.success(data.message); refresh(); }
     else toast.error(data.error ?? "Gagal volunteer");
-  }
-
-  async function handleCheckEligible() {
-    setLoading(true);
-    const res = await api("/donor/check-eligible", { method: "POST" });
-    setEligibility(await res.json());
-    setLoading(false);
-    refresh();
   }
 
   async function handleRespond(reqId: string, accepted: boolean) {
@@ -139,45 +178,121 @@ export default function DonorDashboard() {
           href="/dashboard/donor/screening"
         />
         <StepCard
-          step={2} title="Pemeriksaan Fisik"
+          step={2} title="Pemeriksaan Fisik di PMI"
           status={lastCheckup ? (lastCheckup.passed ? "done" : "warning") : "todo"}
           desc={lastCheckup
             ? `Hb: ${lastCheckup.hemoglobinLevel}, BP: ${lastCheckup.systolicBP}/${lastCheckup.diastolicBP}, BB: ${lastCheckup.weight}kg`
-            : "Belum ada pemeriksaan. Datang ke RS/UTD"}
+            : "Datang ke PMI saat jadwal donor — petugas yang akan input"}
         />
         <StepCard
-          step={3} title="Cek Kelayakan & Daftar"
-          status={me.isEligible ? "done" : "todo"}
-          desc={me.isEligible ? "Anda bisa daftar jadwal donor" : "Jalankan cek setelah skrining + pemeriksaan"}
+          step={3} title="Daftar Jadwal Donor di PMI"
+          status={mySchedules.length > 0 ? "done" : "todo"}
+          desc={
+            mySchedules.length > 0
+              ? `Anda punya ${mySchedules.length} jadwal terdaftar`
+              : "Pilih PMI & tanggal. PMI akan cek fisik saat hari H."
+          }
           action={
-            <Button size="sm" loading={loading} onClick={handleCheckEligible} icon={<Icons.Check />}>
-              Cek Kelayakan
+            <Button size="sm" variant={showScheduleForm ? "ghost" : "primary"}
+              onClick={() => setShowScheduleForm(!showScheduleForm)} icon={<Icons.Plus />}>
+              {showScheduleForm ? "Tutup" : "Daftar Jadwal"}
             </Button>
           }
         />
       </section>
 
-      {eligibility && (
-        <div className={`p-4 rounded ${eligibility.eligible ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
-          <p className="font-semibold">{eligibility.eligible ? "✅ Eligible!" : "❌ Tidak eligible"}</p>
-          {eligibility.missingData && eligibility.missingData.length > 0 && (
-            <div className="mt-2">
-              <p className="text-sm font-medium">Data belum lengkap:</p>
-              <ul className="list-disc list-inside text-sm">
-                {eligibility.missingData.map((r, i) => <li key={i}>{r}</li>)}
-              </ul>
+      {/* Form Daftar Jadwal */}
+      {showScheduleForm && (
+        <Card title="📅 Daftar Jadwal Donor di PMI"
+          subtitle="Pilih PMI tempat Anda akan donor — bisa beda tiap kali"
+          icon={<Icons.Calendar />} variant="highlight">
+          <form onSubmit={submitSchedule} className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Pilih PMI</label>
+              <select
+                value={scheduleForm.pmiId}
+                onChange={(e) => setScheduleForm({ ...scheduleForm, pmiId: e.target.value })}
+                required
+                className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+              >
+                <option value="">— Pilih PMI tempat donor —</option>
+                {sortedPmis.map((p, idx) => {
+                  const proximity =
+                    p.user?.city === authMe?.city ? "📍 Kota sama" :
+                    p.user?.zone === authMe?.zone ? "🗺️ Zona sama" :
+                    p.user?.province === authMe?.province ? "🌏 Provinsi sama" :
+                    "🌐 Nasional";
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {idx === 0 ? "⭐ " : ""}{p.pmiName} ({p.pmiLoc}) — {proximity}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">
+                💡 Diurutkan berdasarkan jarak terdekat. Anda tetap bisa pilih PMI di kota lain.
+              </p>
             </div>
-          )}
-          {eligibility.reasons.length > 0 && (
-            <div className="mt-2">
-              <p className="text-sm font-medium">Alasan:</p>
-              <ul className="list-disc list-inside text-sm">
-                {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
-              </ul>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Tanggal Jadwal</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleForm.jadwal}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, jadwal: e.target.value })}
+                  required
+                  className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Sesi</label>
+                <select
+                  value={scheduleForm.sesi}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, sesi: e.target.value })}
+                  className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                >
+                  <option value="PAGI">🌅 Pagi (08–11)</option>
+                  <option value="SIANG">☀️ Siang (11–14)</option>
+                  <option value="SORE">🌇 Sore (14–17)</option>
+                </select>
+              </div>
             </div>
-          )}
-        </div>
+            <Button type="submit" loading={submitting} size="lg" icon={<Icons.Heart />}>
+              Kirim Pendaftaran
+            </Button>
+          </form>
+        </Card>
       )}
+
+      {/* List Jadwal Donor Saya */}
+      {mySchedules.length > 0 && (
+        <Card title={`Jadwal Donor Saya (${mySchedules.length})`}
+          subtitle="Status jadwal donor Anda di setiap PMI"
+          icon={<Icons.Calendar />}>
+          <div className="space-y-2">
+            {mySchedules.map((s) => (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
+                <div>
+                  <p className="font-semibold text-slate-900 text-sm">
+                    🏛️ {s.pmi?.pmiName ?? "—"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    📅 {new Date(s.jadwal).toLocaleDateString("id-ID", { dateStyle: "medium" })} · Sesi {s.sesi}
+                  </p>
+                  {s.isEligible === true && (
+                    <p className="text-xs text-emerald-700 mt-1">✓ Layak donor (sudah cek fisik di PMI)</p>
+                  )}
+                  {s.isEligible === false && (
+                    <p className="text-xs text-red-700 mt-1">✗ Tidak layak — {s.eligibilityReason}</p>
+                  )}
+                </div>
+                <Badge status={s.status} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
 
       {/* Notifikasi MatchSystem */}
       <Card title={`Permintaan untuk Anda (${notifs.length})`}
