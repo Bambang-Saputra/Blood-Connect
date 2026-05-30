@@ -38,6 +38,7 @@ export default function DonorDashboard() {
   const [openRequests, setOpenRequests] = useState<any[]>([]);
   const [pmiList, setPmiList] = useState<any[]>([]);
   const [mySchedules, setMySchedules] = useState<any[]>([]);
+  const [nearbyBroadcasts, setNearbyBroadcasts] = useState<any[]>([]);
   const [scheduleForm, setScheduleForm] = useState({ pmiId: "", jadwal: "", sesi: "PAGI" });
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ export default function DonorDashboard() {
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
-    const [meRes, authRes, notifRes, histRes, openRes, pmiRes, schedulesRes] = await Promise.all([
+    const [meRes, authRes, notifRes, histRes, openRes, pmiRes, schedulesRes, broadcastsRes] = await Promise.all([
       api("/donor/me").then((r) => r.json()).catch(() => null),
       api("/auth/me").then((r) => r.json()).catch(() => null),
       api("/donor/notifications").then((r) => r.json()).catch(() => ({ data: [] })),
@@ -54,6 +55,7 @@ export default function DonorDashboard() {
       api("/donor/open-requests").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/pmi/list").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/donor/schedules").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/donor/broadcasts").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     setMe(meRes);
     setAuthMe(authRes);
@@ -62,6 +64,17 @@ export default function DonorDashboard() {
     setOpenRequests(openRes.data ?? []);
     setPmiList(pmiRes.data ?? []);
     setMySchedules(schedulesRes.data ?? []);
+    setNearbyBroadcasts(broadcastsRes.data ?? []);
+  }
+
+  // Helper: auto-fill PMI di schedule form + scroll/open it
+  function scheduleAtPmi(pmiId: string) {
+    setScheduleForm((f) => ({ ...f, pmiId }));
+    setShowScheduleForm(true);
+    // scroll ke form supaya kelihatan
+    setTimeout(() => {
+      document.getElementById("schedule-form-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   }
 
   // Sort PMI by proximity ke user (city > zone > province > nasional)
@@ -201,8 +214,47 @@ export default function DonorDashboard() {
         />
       </section>
 
+      {/* Broadcast PMI di kota donor — kalau ada, tampil di atas */}
+      {nearbyBroadcasts.length > 0 && (
+        <Card title={`📢 Permintaan Stok dari PMI di Kota Anda (${nearbyBroadcasts.length})`}
+          subtitle="PMI di kota Anda butuh donor — golongan Anda kompatibel"
+          icon={<Icons.Heart />} variant="highlight">
+          <div className="space-y-2">
+            {nearbyBroadcasts.map((b) => {
+              const golongan = `${b.bloodType}${b.rhesusType === "POSITIVE" ? "+" : "-"}`;
+              return (
+                <div key={b.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl flex items-center justify-center font-bold shadow-sm shrink-0">
+                      {golongan}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900">
+                        🏛️ {b.pmi?.pmiName ?? "—"}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Butuh {b.targetQuantity} kantong {golongan} · 📍 {b.pmi?.pmiLoc}
+                      </p>
+                      {b.message && (
+                        <p className="text-xs text-amber-800 mt-1.5 italic bg-white/60 px-2 py-1 rounded">"{b.message}"</p>
+                      )}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="primary" icon={<Icons.Calendar />}
+                    onClick={() => scheduleAtPmi(b.pmi.id)}>
+                    Daftar Donor di Sini
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Form Daftar Jadwal */}
       {showScheduleForm && (
+        <div id="schedule-form-section">
         <Card title="📅 Daftar Jadwal Donor di PMI"
           subtitle="Pilih PMI tempat Anda akan donor — bisa beda tiap kali"
           icon={<Icons.Calendar />} variant="highlight">
@@ -262,6 +314,7 @@ export default function DonorDashboard() {
             </Button>
           </form>
         </Card>
+        </div>
       )}
 
       {/* List Jadwal Donor Saya */}

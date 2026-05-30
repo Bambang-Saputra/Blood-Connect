@@ -1,7 +1,9 @@
 import { Response } from "express";
 import { z } from "zod";
+import { NotificationType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AuthedRequest } from "../middleware/auth";
+import { notifyUser } from "../lib/notification";
 import { writeAudit } from "../lib/audit";
 
 /**
@@ -13,6 +15,9 @@ import { writeAudit } from "../lib/audit";
  *   GET    /api/pmi/list                     — List PMI VERIFIED (public, untuk donor pilih)
  *   GET    /api/pmi/schedules                — Jadwal donor yang scoped ke PMI ini
  *   POST   /api/pmi/schedules/:id/checkup    — Input cek fisik untuk 1 jadwal (auto eligibility)
+ *   POST   /api/pmi/broadcasts               — Broadcast minta stok ke donor satu kota
+ *   GET    /api/pmi/broadcasts               — List broadcast yang sudah dibuat PMI ini
+ *   PATCH  /api/pmi/broadcasts/:id/close     — Tutup broadcast (target tercapai)
  *   PATCH  /api/pmi/schedules/:id/status     — PMI confirm/reject jadwal
  * =====================================================================
  */
@@ -235,3 +240,135 @@ export async function updateScheduleStatus(req: AuthedRequest, res: Response) {
 
   return res.json({ message: "Status jadwal diperbarui", schedule: updated });
 }
+
+// =====================================================================
+// POST /api/pmi/broadcasts
+// PMI broadcast minta stok darah → notif ke donor di KOTA YANG SAMA
+// dengan PMI tersebut yang golongan darahnya compatible.
+// =====================================================================
+const broadcastSchema = z.object({
+  bloodType: z.enum(["A", "B", "AB", "O"]),
+  rhesusType: z.enum(["POSITIVE", "NEGATIVE"]),
+  targetQuantity: z.number().int().positive("Target jumlah kantong minimal 1"),
+  message: z.string().max(500).optional(),
+  expiresAt: z.string().datetime().optional(),
+});
+
+// Donor X bisa donor ke recipient golongan Y kalau donor.golongan in COMPAT[Y]
+// Tapi karena PMI minta stok untuk golongan Y, kita cari donor yang
+// GOLONGANNYA Y atau yang BISA donor ke Y (universal donor).
+//
+// Untuk simplifikasi MVP: kita match exact golongan dulu (donor O+ untuk PMI minta O+).
+// Plus universal donor (O- bisa untuk semua recipient).
+const UNIVERSAL_DONOR_KEY = "O-";
+
+export async function createBroadcast(req: AuthedRequest, res: Response) {
+  const parsed = broadcastSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const pmi = await prisma.pMI.findUnique({
+    where: { userId: req.user!.id },
+    include: { user: { select: { city: true } } },
+  });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa broadcast" });
+  if (pmi.status !== "VERIFIED") return res.status(403).json({ error: "PMI belum diverifikasi" });
+
+  const pmiCity = pmi.user.city;
+
+  // Create broadcast record
+  const broadcast = await prisma.pmiBroadcast.create({
+    data: {
+      pmiId: pmi.id,
+      bloodType: parsed.data.bloodType,
+      rhesusType: parsed.data.rhesusType,
+      targetQuantity: parsed.data.targetQuantity,
+      message: parsed.data.message,
+      expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+    },
+  });
+
+  // Find target donors: kota sama dengan PMI + golongan compatible + active
+  const targetKey = `${parsed.data.bloodType}${parsed.data.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  const candidates = await prisma.pendonor.findMany({
+    where: {
+      isActive: true,
+      user: { city: pmiCity },
+      OR: [
+        // Exact golongan
+        { bloodType: parsed.data.bloodType, rhesusType: parsed.data.rhesusType },
+        // Universal donor (O-) untuk semua recipient
+        ...(targetKey !== UNIVERSAL_DONOR_KEY
+          ? [{ bloodType: "O" as const, rhesusType: "NEGATIVE" as const }]
+          : []),
+      ],
+    },
+    include: { user: { select: { email: true, name: true, id: true } } },
+    take: 200,
+  });
+
+  // Fire-and-forget notifikasi — supaya respons cepat
+  const golonganLabel = `${parsed.data.bloodType}${parsed.data.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  Promise.all(
+    candidates.map((c) =>
+      notifyUser({
+        userId: c.user.id,
+        email: c.user.email,
+        type: NotificationType.PMI_BROADCAST,
+        title: `🩸 ${pmi.pmiName} butuh donor ${golonganLabel}`,
+        body:
+          parsed.data.message ??
+          `PMI di kota Anda butuh ${parsed.data.targetQuantity} kantong darah ${golonganLabel}. Anda kompatibel — silakan daftar jadwal donor.`,
+        meta: { broadcastId: broadcast.id, pmiId: pmi.id, bloodType: golonganLabel },
+      })
+    )
+  ).catch((err) => console.error("[broadcast] notif batch error:", err));
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "CREATE",
+    entity: "PmiBroadcast",
+    entityId: broadcast.id,
+    after: { ...broadcast, notifiedDonors: candidates.length },
+    ipAddress: req.ip,
+  });
+
+  return res.status(201).json({
+    message: `Broadcast dikirim ke ${candidates.length} donor di ${pmiCity}.`,
+    broadcast,
+    notifiedDonors: candidates.length,
+  });
+}
+
+// =====================================================================
+// GET /api/pmi/broadcasts — list broadcast milik PMI ini
+// =====================================================================
+export async function listMyBroadcasts(req: AuthedRequest, res: Response) {
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa akses" });
+
+  const data = await prisma.pmiBroadcast.findMany({
+    where: { pmiId: pmi.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  return res.json({ data });
+}
+
+// =====================================================================
+// PATCH /api/pmi/broadcasts/:id/close — tutup broadcast manual
+// =====================================================================
+export async function closeBroadcast(req: AuthedRequest, res: Response) {
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa akses" });
+
+  const existing = await prisma.pmiBroadcast.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Broadcast tidak ditemukan" });
+  if (existing.pmiId !== pmi.id) return res.status(403).json({ error: "Bukan broadcast PMI Anda" });
+
+  const updated = await prisma.pmiBroadcast.update({
+    where: { id: existing.id },
+    data: { status: "CLOSED" },
+  });
+  return res.json({ message: "Broadcast ditutup", broadcast: updated });
+}
+

@@ -27,13 +27,14 @@ router.get("/notifications/count", requireAuth, notif.unreadCount);
 router.patch("/notifications/read-all", requireAuth, notif.markAllRead);
 router.patch("/notifications/:id/read", requireAuth, notif.markRead);
 
-// ---------------------- REQUEST DARAH + MATCHSYSTEM ------------------
+// ---------------------- REQUEST DARAH --------------------------------
+// Auto-match dihapus — request stays PENDING sampai PMI accept eksplisit,
+// dan stok hanya dipotong saat PMI klik Fulfill.
 router.get("/requests", requireAuth, match.listMyRequests);
 router.post("/requests", requireAuth, requireRole("PASIEN"), match.createRequest);   // Pasien only
 router.get("/requests/:id", requireAuth, match.getRequest);
 router.post("/requests/:id/accept", requireAuth, requireRole("PMI"), match.acceptRequest);
 router.patch("/requests/:id/status", requireAuth, requireRole("PMI", "ADMIN"), match.updateRequestStatus);
-router.post("/requests/:id/match", requireAuth, requireRole("ADMIN"), match.triggerMatch);
 
 // ---------------------- PENDONOR -------------------------------------
 router.get("/donor/me", requireAuth, requireRole("PENDONOR"), donor.getMe);
@@ -46,6 +47,7 @@ router.get("/donor/notifications", requireAuth, requireRole("PENDONOR"), donor.l
 router.post("/donor/notifications/:id/respond", requireAuth, requireRole("PENDONOR"), donor.respondNotification);
 router.get("/donor/open-requests", requireAuth, requireRole("PENDONOR"), donor.listOpenRequests);
 router.post("/donor/volunteer/:requestId", requireAuth, requireRole("PENDONOR"), donor.volunteerForRequest);
+router.get("/donor/broadcasts", requireAuth, requireRole("PENDONOR"), donor.listNearbyBroadcasts);
 
 // ---------------------- PMI DASHBOARD --------------------------------
 router.get("/pmi/me", requireAuth, requireRole("PMI"), pmi.getMyPmi);
@@ -53,6 +55,10 @@ router.get("/pmi/list", requireAuth, pmi.listPublicPmis);                       
 router.get("/pmi/schedules", requireAuth, requireRole("PMI"), pmi.listMySchedules);
 router.post("/pmi/schedules/:id/checkup", requireAuth, requireRole("PMI"), pmi.inputScheduleCheckup);
 router.patch("/pmi/schedules/:id/status", requireAuth, requireRole("PMI"), pmi.updateScheduleStatus);
+// Broadcast minta stok ke donor terdekat (kota sama)
+router.post("/pmi/broadcasts", requireAuth, requireRole("PMI"), pmi.createBroadcast);
+router.get("/pmi/broadcasts", requireAuth, requireRole("PMI"), pmi.listMyBroadcasts);
+router.patch("/pmi/broadcasts/:id/close", requireAuth, requireRole("PMI"), pmi.closeBroadcast);
 
 // ---------------------- MEDICAL (cek fisik fallback + skrining) ------
 router.get("/medical/donor-lookup", requireAuth, requireRole("ADMIN", "PMI"), medical.lookupDonor);
@@ -61,19 +67,19 @@ router.post("/medical/screening", requireAuth, requireRole("PENDONOR"), medical.
 router.get("/medical/me", requireAuth, requireRole("PENDONOR"), medical.getMyCheckups);
 
 // ---------------------- STOCK ----------------------------------------
+// Stok langsung AVAILABLE — tidak ada lagi /stocks/:id/verify (quarantine dihapus).
 router.get("/stocks", requireAuth, stock.checkAvailability);
 router.post("/stocks", requireAuth, requireRole("PMI"), stock.createStock);
 router.get("/stocks/mine", requireAuth, requireRole("PMI"), stock.listMyStocks);
-router.get("/stocks/summary", requireAuth, requireRole("PMI"), stock.getStockSummary);     // untuk chart
-router.patch("/stocks/:id/verify", requireAuth, requireRole("ADMIN"), stock.verifyStock);
+router.get("/stocks/summary", requireAuth, requireRole("PMI"), stock.getStockSummary);
 
 // ---------------------- ADMIN ----------------------------------------
+// Admin hanya urusan verifikasi PMI + read-only audit. TIDAK menyentuh stok.
 router.get("/admin/schedules", requireAuth, requireRole("ADMIN"), admin.listSchedules);
 router.patch("/admin/schedules/:id", requireAuth, requireRole("ADMIN"), admin.updateSchedule);
 router.get("/admin/requests", requireAuth, requireRole("ADMIN"), admin.listRequests);
 router.get("/admin/pmis", requireAuth, requireRole("ADMIN"), admin.listPmis);
 router.patch("/admin/pmis/:id/verify", requireAuth, requireRole("ADMIN"), admin.verifyPmi);
-router.get("/admin/stocks/quarantine", requireAuth, requireRole("ADMIN"), admin.listQuarantineStocks);
 
 // Backward-compat aliases (sementara) — FE lama masih panggil /admin/hospitals
 router.get("/admin/hospitals", requireAuth, requireRole("ADMIN"), admin.listPmis);

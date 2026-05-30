@@ -188,17 +188,42 @@ Akan terbentuk 13 tabel di Neon dashboard.
 npm run seed
 ```
 
-Membuat:
-- 1 Admin (`admin@bloodconnect.id` / `admin12345`)
-- 2 RS (`rscm@test.com` VERIFIED dengan 5 batch stok; `rsfm@test.com` UNVERIFIED untuk demo workflow)
-- 3 Pendonor (1 sudah eligible, 1 perlu skrining, 1 di kota beda)
-- 2 Pasien siap request
-
-Semua password (kecuali admin): `password123`.
-
 **Opsi B — Cuma buat admin saja:**
 ```powershell
 npm run admin:create
+```
+
+#### 🔑 Akun Dummy untuk Testing
+
+Setelah `npm run seed`, akun berikut siap login:
+
+| Role | Email | Password | Status |
+|------|-------|----------|--------|
+| 🛡️ **Admin** | `admin@bloodconnect.id` | `admin12345` | Verifikasi PMI |
+| 🏛️ **PMI Jakarta** | `pmi.jakarta@test.com` | `password123` | ✅ VERIFIED + 6 batch stok |
+| 🏛️ **PMI Surabaya** | `pmi.surabaya@test.com` | `password123` | ✅ VERIFIED (kota lain) |
+| 🏛️ **PMI Bandung** | `pmi.bandung@test.com` | `password123` | ⏳ UNVERIFIED (demo verify) |
+| 💉 **Donor 1 (Jakarta)** | `donor1@test.com` | `password123` | Skrining ✓ — siap daftar jadwal |
+| 💉 **Donor 2 (Jakarta)** | `donor2@test.com` | `password123` | Belum skrining — untuk demo flow |
+| 💉 **Donor 3 (Surabaya)** | `donor3@test.com` | `password123` | Untuk testing proximity sort |
+| 🩺 **Pasien 1** | `pasien1@test.com` | `password123` | Siap request darah |
+| 🩺 **Pasien 2** | `pasien2@test.com` | `password123` | Siap request darah |
+
+> 💡 **Catatan UI**: Tombol auto-fill di `/login` hanya menampilkan Pendonor + Pasien
+> (sesuai spec UI). Untuk login Admin / PMI, **ketik email + password manual** di form.
+
+##### Demo Flow Lengkap (Recommended)
+
+```
+1. Login pasien1@test.com → request darah O+ ke RS Tujuan = "RS Pondok Indah"
+2. Login pmi.jakarta@test.com → lihat request di panel → klik [Accept]
+3. Klik [Fulfill] → stok PMI Jakarta dipotong, status FULFILLED ✓
+4. Login pmi.jakarta@test.com → klik [📢 Broadcast Stok] → minta darah O+
+5. Login donor1@test.com → lihat broadcast di panel atas → klik "Daftar Donor di Sini"
+6. Form schedule auto-fill PMI Jakarta → pilih tanggal → submit
+7. Login pmi.jakarta@test.com → "Jadwal Donor di PMI Anda" → expand donor1
+   → input cek fisik → eligibility auto compute → confirm
+8. Login admin@bloodconnect.id → /dashboard/admin → verify pmi.bandung
 ```
 
 ### 6. Jalankan Website

@@ -1,8 +1,7 @@
 import { Response } from "express";
 import { z } from "zod";
-import { Prisma, RequestStatus } from "@prisma/client";
+import { Prisma, RequestStatus, StockStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { processMatch } from "../services/matchSystemService";
 import { AuthedRequest } from "../middleware/auth";
 import { writeAudit } from "../lib/audit";
 
@@ -108,27 +107,17 @@ export async function createRequest(req: AuthedRequest, res: Response) {
     },
   });
 
-  // Trigger MatchSystem async
-  triggerMatchWithRetry(request.id).catch((err) =>
-    console.error("[match] fatal:", err)
-  );
+  // PENTING: TIDAK trigger MatchSystem auto-allocate stock.
+  // Stok hanya akan dipotong saat PMI yang accept klik [Fulfill] secara eksplisit.
+  // Ini menjamin:
+  //   1. PMI bisa lihat request di dashboard sebagai PENDING
+  //   2. Stok PMI tidak bocor otomatis untuk request orang lain
+  //   3. PMI punya kontrol penuh kapan men-deduct stoknya
 
   return res.status(201).json({
-    message: "Permintaan darah berhasil dibuat. Semua PMI akan menerima notifikasi.",
+    message: "Permintaan darah berhasil dibuat. Semua PMI nasional akan menerima notifikasi.",
     request,
   });
-}
-
-// =====================================================================
-// 2) POST /api/requests/:id/match — trigger ulang MatchSystem
-// =====================================================================
-export async function triggerMatch(req: AuthedRequest, res: Response) {
-  try {
-    const result = await triggerMatchWithRetry(req.params.id);
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ error: "MatchSystem error", detail: err.message });
-  }
 }
 
 // =====================================================================
@@ -277,11 +266,108 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
     }
   }
 
+  // FULFILLED → allocate stok dari PMI yang accept request. Atomic transaction
+  // memastikan kalau stok kurang, semuanya rollback dan PMI tahu via error message.
+  if (parsed.data.newStatus === "FULFILLED") {
+    if (!before.acceptedByPmiId) {
+      return res.status(400).json({
+        error: "Request belum di-accept PMI manapun. Accept dulu sebelum Fulfill.",
+      });
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Cari stok PMI ini yang AVAILABLE + belum expired, sorted FEFO
+        const stocks = await tx.stokDarah.findMany({
+          where: {
+            pmiId: before.acceptedByPmiId!,
+            status: StockStatus.AVAILABLE,
+            expiryDate: { gt: new Date() },
+            bloodType: before.bloodType,
+            rhesusType: before.rhesusType,
+            component: before.component,
+          },
+          orderBy: { expiryDate: "asc" },
+        });
+
+        let remaining = before.quantity;
+        const allocations: { stockId: string; quantity: number }[] = [];
+
+        for (const stock of stocks) {
+          if (remaining <= 0) break;
+          const take = Math.min(stock.quantity, remaining);
+          allocations.push({ stockId: stock.id, quantity: take });
+          remaining -= take;
+        }
+
+        if (remaining > 0) {
+          throw new Error(
+            `Stok PMI Anda tidak cukup untuk fulfill request ini. ` +
+            `Butuh ${before.quantity} kantong, tersedia ${before.quantity - remaining}. ` +
+            `Broadcast permintaan stok ke donor terlebih dahulu, lalu coba Fulfill lagi.`
+          );
+        }
+
+        // Kurangi qty + create allocation records
+        for (const alloc of allocations) {
+          const stock = stocks.find((s) => s.id === alloc.stockId)!;
+          const newQty = stock.quantity - alloc.quantity;
+          await tx.stokDarah.update({
+            where: { id: alloc.stockId },
+            data: {
+              quantity: newQty,
+              status: newQty === 0 ? StockStatus.USED : StockStatus.AVAILABLE,
+            },
+          });
+          await tx.stockAllocation.create({
+            data: {
+              requestId: before.id,
+              stockId: alloc.stockId,
+              quantity: alloc.quantity,
+            },
+          });
+        }
+
+        const updated = await tx.permintaanDonor.update({
+          where: { id: req.params.id },
+          data: {
+            reqStatus: RequestStatus.FULFILLED,
+            fulfilledAt: new Date(),
+          },
+        });
+
+        return { updated, allocations };
+      });
+
+      await writeAudit({
+        userId: req.user!.id,
+        action: "STATUS_CHANGE",
+        entity: "PermintaanDonor",
+        entityId: result.updated.id,
+        before: { status: before.reqStatus },
+        after: {
+          status: "FULFILLED",
+          note: parsed.data.note,
+          allocatedStocks: result.allocations.length,
+        },
+        ipAddress: req.ip,
+      });
+
+      return res.json({
+        message: `Request fulfilled. Stok dari ${result.allocations.length} batch dipotong.`,
+        request: result.updated,
+        allocations: result.allocations,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ error: err.message ?? "Gagal fulfill request" });
+    }
+  }
+
+  // Untuk status lain (PROCESSING, REJECTED, dll), update tanpa stock allocation
   const updated = await prisma.permintaanDonor.update({
     where: { id: req.params.id },
     data: {
       reqStatus: parsed.data.newStatus as any,
-      fulfilledAt: parsed.data.newStatus === "FULFILLED" ? new Date() : undefined,
     },
   });
 
@@ -296,21 +382,4 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
   });
 
   return res.json({ message: "Status diperbarui", request: updated });
-}
-
-// =====================================================================
-// Helper: retry MatchSystem saat serialization conflict
-// =====================================================================
-async function triggerMatchWithRetry(requestId: string, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await processMatch(requestId);
-    } catch (err: any) {
-      const isSerial =
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        (err.code === "P2034" || err.message.includes("serialization"));
-      if (!isSerial || i === attempts - 1) throw err;
-      await new Promise((r) => setTimeout(r, 100 * (i + 1)));
-    }
-  }
 }

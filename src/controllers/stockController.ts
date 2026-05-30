@@ -7,10 +7,11 @@ import { writeAudit } from "../lib/audit";
 /**
  * Use Case: UPDATE STOCK & CHECK AVAILABILITY
  *
- * Catatan keamanan:
+ * Catatan:
  *   - pmiId selalu diambil dari session (req.user) — tidak menerima dari body
- *     untuk mencegah mass assignment
- *   - Default StockStatus = QUARANTINE — harus di-verify dulu baru AVAILABLE
+ *     untuk mencegah mass assignment.
+ *   - Stok langsung AVAILABLE (default schema). Admin tidak lagi terlibat
+ *     verifikasi quarantine — PMI bertanggung jawab penuh validasi internal.
  */
 
 const createStockSchema = z.object({
@@ -63,35 +64,9 @@ export async function createStock(req: AuthedRequest, res: Response) {
   });
 
   return res.status(201).json({
-    message: "Stok dibuat dengan status QUARANTINE. Tunggu uji laboratorium sebelum AVAILABLE.",
+    message: "Stok berhasil ditambahkan & langsung AVAILABLE.",
     stock,
   });
-}
-
-// Verifikasi stok lolos uji lab → status AVAILABLE
-export async function verifyStock(req: AuthedRequest, res: Response) {
-  const stock = await prisma.stokDarah.findUnique({ where: { id: req.params.id } });
-  if (!stock) return res.status(404).json({ error: "Stok tidak ditemukan" });
-  if (stock.status !== "QUARANTINE") {
-    return res.status(400).json({ error: `Stok sudah berstatus ${stock.status}` });
-  }
-
-  const updated = await prisma.stokDarah.update({
-    where: { id: stock.id },
-    data: { status: "AVAILABLE" },
-  });
-
-  await writeAudit({
-    userId: req.user!.id,
-    action: "STATUS_CHANGE",
-    entity: "StokDarah",
-    entityId: stock.id,
-    before: { status: "QUARANTINE" },
-    after: { status: "AVAILABLE" },
-    ipAddress: req.ip,
-  });
-
-  return res.json({ message: "Stok lolos uji & tersedia", stock: updated });
 }
 
 // Use Case: CHECK AVAILABILITY

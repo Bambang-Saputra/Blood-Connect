@@ -73,24 +73,35 @@ export default function PmiDashboard() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [chartData, setChartData] = useState<{ label: string; total: number }[]>([]);
+  const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddStock, setShowAddStock] = useState(false);
+  const [showBroadcastForm, setShowBroadcastForm] = useState(false);
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
     setLoading(true);
-    const [r, s, sch, summary] = await Promise.all([
+    const [r, s, sch, summary, bc] = await Promise.all([
       api("/requests").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/stocks/mine").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/pmi/schedules").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/stocks/summary").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/pmi/broadcasts").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
     setRequests(r.data ?? []);
     setStocks(s.data ?? []);
     setSchedules(sch.data ?? []);
     setChartData(summary.data ?? []);
+    setBroadcasts(bc.data ?? []);
     setLoading(false);
+  }
+
+  async function closeBroadcast(id: string) {
+    if (!confirm("Tutup broadcast ini? Donor tidak akan dapat respons lagi.")) return;
+    const res = await api(`/pmi/broadcasts/${id}/close`, { method: "PATCH" });
+    if (res.ok) { toast.success("Broadcast ditutup"); refresh(); }
+    else toast.error("Gagal tutup broadcast");
   }
 
   async function acceptRequest(id: string) {
@@ -111,9 +122,9 @@ export default function PmiDashboard() {
   }
 
   const totalAvailable = stocks.filter((s) => s.status === "AVAILABLE").reduce((sum, s) => sum + s.quantity, 0);
-  const totalQuarantine = stocks.filter((s) => s.status === "QUARANTINE").reduce((sum, s) => sum + s.quantity, 0);
   const activeRequestsCount = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus)).length;
   const pendingSchedules = schedules.filter((s) => s.status === "PENDING").length;
+  const openBroadcasts = broadcasts.filter((b) => b.status === "OPEN").length;
 
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8 space-y-6">
@@ -125,6 +136,10 @@ export default function PmiDashboard() {
           <p className="text-sm text-slate-500 mt-1">Kelola stok darah, permintaan pasien, & jadwal donor</p>
         </div>
         <div className="flex gap-2 items-center">
+          <Button variant="danger" size="sm" icon={<span>📢</span>}
+            onClick={() => setShowBroadcastForm(!showBroadcastForm)}>
+            {showBroadcastForm ? "Tutup" : "Broadcast Stok"}
+          </Button>
           <Button variant="success" size="sm" icon={showAddStock ? <Icons.X /> : <Icons.Plus />}
             onClick={() => setShowAddStock(!showAddStock)}>
             {showAddStock ? "Tutup" : "Tambah Stok"}
@@ -141,10 +156,10 @@ export default function PmiDashboard() {
       {/* Stats */}
       <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon="🩸" label="Total Batch Stok" value={stocks.length} gradient="from-red-500 to-rose-600" />
-        <StatCard icon="✅" label="Available" value={totalAvailable} gradient="from-emerald-500 to-green-600" />
-        <StatCard icon="🧪" label="Quarantine" value={totalQuarantine} gradient="from-amber-500 to-yellow-600" />
+        <StatCard icon="✅" label="Stok Available" value={totalAvailable} gradient="from-emerald-500 to-green-600" />
         <StatCard icon="📋" label="Permintaan Aktif" value={activeRequestsCount} gradient="from-blue-500 to-indigo-600" />
         <StatCard icon="📅" label="Jadwal Pending" value={pendingSchedules} gradient="from-purple-500 to-fuchsia-600" />
+        <StatCard icon="📢" label="Broadcast Aktif" value={openBroadcasts} gradient="from-amber-500 to-orange-600" />
       </section>
 
       {/* Stock Chart */}
@@ -187,9 +202,53 @@ export default function PmiDashboard() {
         </div>
       </Card>
 
+      {/* Form Broadcast Permintaan Stok */}
+      {showBroadcastForm && (
+        <BroadcastForm onCreated={() => { setShowBroadcastForm(false); refresh(); }} onCancel={() => setShowBroadcastForm(false)} />
+      )}
+
       {/* Form Tambah Stok */}
       {showAddStock && (
         <AddStockForm onCreated={() => { setShowAddStock(false); refresh(); }} onCancel={() => setShowAddStock(false)} />
+      )}
+
+      {/* Daftar Broadcast PMI */}
+      {broadcasts.length > 0 && (
+        <Card title={`📢 Broadcast Permintaan Stok (${broadcasts.length})`}
+          subtitle="Broadcast yang Anda kirim ke donor satu kota"
+          icon={<Icons.Heart />}>
+          <div className="space-y-2">
+            {broadcasts.map((b) => {
+              const golongan = `${b.bloodType}${b.rhesusType === "POSITIVE" ? "+" : "-"}`;
+              return (
+                <div key={b.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">
+                      {golongan}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">
+                        Target {b.targetQuantity} kantong {golongan}
+                      </p>
+                      {b.message && <p className="text-xs text-slate-500 mt-0.5 italic">"{b.message}"</p>}
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Dibuat {new Date(b.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge status={b.status} />
+                    {b.status === "OPEN" && (
+                      <Button size="sm" variant="ghost" onClick={() => closeBroadcast(b.id)}>
+                        Tutup
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       )}
 
       {/* Request Panel — broadcast + own claimed */}
@@ -595,6 +654,104 @@ function StatCard({ icon, label, value, gradient }: { icon: string; label: strin
   );
 }
 
+// =====================================================================
+// BROADCAST FORM — PMI minta stok darah ke donor satu kota
+// =====================================================================
+function BroadcastForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const [form, setForm] = useState({
+    bloodType: "O", rhesusType: "POSITIVE",
+    targetQuantity: "10",
+    message: "",
+    expiresAt: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const qty = Number(form.targetQuantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast.error("Target kantong harus angka positif");
+      return;
+    }
+    setSubmitting(true);
+    const res = await api("/pmi/broadcasts", {
+      method: "POST",
+      body: JSON.stringify({
+        bloodType: form.bloodType,
+        rhesusType: form.rhesusType,
+        targetQuantity: qty,
+        message: form.message || undefined,
+        expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
+      }),
+    });
+    const data = await res.json();
+    setSubmitting(false);
+    if (res.ok) {
+      toast.success(data.message);
+      onCreated();
+    } else {
+      toast.error(typeof data.error === "string" ? data.error : "Gagal broadcast");
+    }
+  }
+
+  return (
+    <Card title="📢 Broadcast Permintaan Stok ke Donor"
+      subtitle="Donor di kota yang sama dengan PMI Anda akan menerima notifikasi"
+      icon={<Icons.Heart />} variant="highlight"
+      action={<Button variant="ghost" size="sm" icon={<Icons.X />} onClick={onCancel}>Tutup</Button>}>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <FormField label="Golongan">
+            <select value={form.bloodType} onChange={(e) => setForm({ ...form, bloodType: e.target.value })} className={inputCls}>
+              <option>A</option><option>B</option><option>AB</option><option>O</option>
+            </select>
+          </FormField>
+          <FormField label="Rhesus">
+            <select value={form.rhesusType} onChange={(e) => setForm({ ...form, rhesusType: e.target.value })} className={inputCls}>
+              <option value="POSITIVE">Rh+ Positif</option>
+              <option value="NEGATIVE">Rh- Negatif</option>
+            </select>
+          </FormField>
+          <FormField label="Target Kantong">
+            <input type="number" min={1} step={1} value={form.targetQuantity}
+              onChange={(e) => setForm({ ...form, targetQuantity: e.target.value.replace(/^0+(?=\d)/, "").replace(/-/g, "") })}
+              onFocus={(e) => e.target.select()}
+              className={inputCls} required placeholder="10" />
+          </FormField>
+        </div>
+
+        <FormField label="Pesan untuk Donor (opsional)">
+          <textarea
+            value={form.message}
+            onChange={(e) => setForm({ ...form, message: e.target.value })}
+            rows={2}
+            className="w-full border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+            placeholder="Contoh: Stok kritis untuk pasien thalassemia. Mohon bantuan segera."
+          />
+        </FormField>
+
+        <FormField label="Deadline (opsional)">
+          <input type="datetime-local" value={form.expiresAt}
+            onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
+            className={inputCls} />
+        </FormField>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+          ℹ️ Sistem akan kirim notif ke <strong>semua donor di kota PMI Anda</strong> yang golongannya cocok
+          (exact match atau donor universal O−). Donor bisa langsung daftar jadwal di PMI Anda.
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="submit" loading={submitting} variant="danger" icon={<span>📢</span>}>
+            Kirim Broadcast
+          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>Batal</Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 function AddStockForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
   const [form, setForm] = useState({
     bloodType: "O", rhesusType: "POSITIVE", component: "WHOLE_BLOOD",
@@ -626,7 +783,7 @@ function AddStockForm({ onCreated, onCancel }: { onCreated: () => void; onCancel
 
   return (
     <Card title="Tambah Stok Darah Baru"
-      subtitle="Stok akan masuk ke QUARANTINE — admin verify setelah uji lab"
+      subtitle="Stok akan langsung AVAILABLE — pastikan sudah lolos validasi internal PMI"
       icon={<Icons.Plus />} variant="success"
       action={<Button variant="ghost" size="sm" icon={<Icons.X />} onClick={onCancel}>Tutup</Button>}>
       <form onSubmit={submit} className="space-y-4">
@@ -673,8 +830,8 @@ function AddStockForm({ onCreated, onCancel }: { onCreated: () => void; onCancel
         </div>
 
         <div className="bg-white/60 border border-emerald-200 rounded-lg p-3 text-xs text-slate-700">
-          ℹ️ <strong>Status awal:</strong> <code className="bg-yellow-100 px-1.5 py-0.5 rounded">QUARANTINE</code>.
-          Admin pusat perlu verify ke <code className="bg-green-100 px-1.5 py-0.5 rounded">AVAILABLE</code> setelah uji lab lolos.
+          ℹ️ Stok akan tersimpan dengan status <code className="bg-green-100 px-1.5 py-0.5 rounded">AVAILABLE</code> dan
+          langsung bisa dipakai untuk fulfill request pasien.
         </div>
 
         <div className="flex gap-2">

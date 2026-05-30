@@ -89,7 +89,14 @@ enum NotificationType {
   SCHEDULE_UPDATE
   STOCK_ALERT
   ACCOUNT_VERIFICATION
+  PMI_BROADCAST           // PMI minta stok darah ke donor terdekat
   GENERIC
+}
+
+enum BroadcastStatus {
+  OPEN                    // masih butuh donor
+  CLOSED                  // target tercapai atau ditutup manual
+  EXPIRED                 // melewati expiresAt
 }
 
 enum AuditAction {
@@ -246,6 +253,7 @@ model PMI {
   schedules         JadwalDonor[]
   examinations      PemeriksaanDonor[]
   donorPreferences  Pendonor[]          @relation("DonorPreferredPMI")
+  broadcasts        PmiBroadcast[]
 }
 
 // ---------------------------------------------------------------------
@@ -262,7 +270,9 @@ model StokDarah {
   quantity      Int
   expiryDate    DateTime
   location      String
-  status        StockStatus    @default(QUARANTINE)
+  // Default AVAILABLE — admin tidak lagi terlibat verifikasi quarantine.
+  // PMI bertanggung jawab penuh atas validasi internal sebelum input ke sistem.
+  status        StockStatus    @default(AVAILABLE)
   source        String?
   donorId       String?
   createdAt     DateTime       @default(now())
@@ -273,6 +283,27 @@ model StokDarah {
   @@index([bloodType, rhesusType, component, status, expiryDate])
   @@index([location])
   @@index([pmiId])
+}
+
+// ---------------------------------------------------------------------
+// PMI BROADCAST — PMI minta stok darah ke donor terdekat (kota sama)
+// ---------------------------------------------------------------------
+model PmiBroadcast {
+  id              String          @id @default(cuid())
+  pmiId           String
+  pmi             PMI             @relation(fields: [pmiId], references: [id])
+  bloodType       BloodType
+  rhesusType      RhesusType
+  targetQuantity  Int
+  filledQuantity  Int             @default(0)   // qty yang sudah didapat dari donor (manual track)
+  message         String?
+  status          BroadcastStatus @default(OPEN)
+  expiresAt       DateTime?                      // null = tidak ada deadline
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([pmiId, status, createdAt])
+  @@index([bloodType, rhesusType, status])
 }
 
 // ---------------------------------------------------------------------
