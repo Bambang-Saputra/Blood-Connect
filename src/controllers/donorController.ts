@@ -299,3 +299,41 @@ export async function updatePreferredPmi(req: AuthedRequest, res: Response) {
   });
   return res.json({ message: "PMI preferensi diperbarui", pmiName: pmi.pmiName });
 }
+
+// =====================================================================
+// GET /api/donor/broadcasts
+// List PMI broadcast yang RELEVAN untuk donor ini:
+//   - status OPEN
+//   - PMI berada di kota yang sama dengan donor
+//   - golongan compatible (exact OR donor universal O-)
+// =====================================================================
+export async function listNearbyBroadcasts(req: AuthedRequest, res: Response) {
+  const donor = await prisma.pendonor.findUnique({
+    where: { userId: req.user!.id },
+    include: { user: { select: { city: true } } },
+  });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  const donorIsUniversal = donor.bloodType === "O" && donor.rhesusType === "NEGATIVE";
+
+  const broadcasts = await prisma.pmiBroadcast.findMany({
+    where: {
+      status: "OPEN",
+      pmi: { user: { city: donor.user.city }, status: "VERIFIED" },
+      ...(donorIsUniversal
+        ? {} // O- bisa donor ke semua
+        : {
+            // Non-universal: exact match golongan
+            bloodType: donor.bloodType,
+            rhesusType: donor.rhesusType,
+          }),
+    },
+    include: {
+      pmi: { select: { id: true, pmiName: true, pmiLoc: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  return res.json({ data: broadcasts });
+}
