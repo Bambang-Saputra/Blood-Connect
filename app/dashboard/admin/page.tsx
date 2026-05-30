@@ -24,14 +24,14 @@ export default function AdminDashboard() {
   async function refresh() {
     setLoading(true);
     const [hUnverified, hVerified, q, s, r, allReq] = await Promise.all([
-      api("/admin/hospitals?status=UNVERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
-      api("/admin/hospitals?status=VERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/admin/pmis?status=UNVERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
+      api("/admin/pmis?status=VERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/stocks/quarantine").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/schedules?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/requests?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/requests").then((r) => r.json()).catch(() => ({ data: [] })),
     ]);
-    
+
     setUnverifiedHospitals(hUnverified.data ?? []);
     setVerifiedHospitals(hVerified.data ?? []);
     setQuarantineStocks(q.data ?? []);
@@ -42,10 +42,10 @@ export default function AdminDashboard() {
   }
 
   async function verifyHospital(id: string, status: "VERIFIED" | "SUSPENDED") {
-    if (!confirm(`Yakin set status RS ke ${status}?`)) return;
-    const res = await api(`/admin/hospitals/${id}/verify`, { method: "PATCH", body: JSON.stringify({ status }) });
-    if (res.ok) { toast.success(`Status RS berhasil diubah menjadi ${status}`); refresh(); }
-    else toast.error("Gagal mengubah status RS");
+    if (!confirm(`Yakin set status PMI ke ${status}?`)) return;
+    const res = await api(`/admin/pmis/${id}/verify`, { method: "PATCH", body: JSON.stringify({ status }) });
+    if (res.ok) { toast.success(`Status PMI berhasil diubah menjadi ${status}`); refresh(); }
+    else toast.error("Gagal mengubah status PMI");
   }
 
   async function verifyStock(id: string) {
@@ -69,8 +69,8 @@ export default function AdminDashboard() {
   }
 
   const chartData = [
-    { name: 'RS Verified', total: verifiedHospitals.length, color: '#10b981' },
-    { name: 'RS Pending', total: unverifiedHospitals.length, color: '#f97316' },
+    { name: 'PMI Verified', total: verifiedHospitals.length, color: '#10b981' },
+    { name: 'PMI Pending', total: unverifiedHospitals.length, color: '#f97316' },
     { name: 'Stok Karantina', total: quarantineStocks.length, color: '#eab308' },
     { name: 'Jadwal Pending', total: pendingSchedules.length, color: '#3b82f6' },
     { name: 'Request Tertahan', total: stuckRequests.length, color: '#ef4444' },
@@ -105,8 +105,8 @@ export default function AdminDashboard() {
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 grid grid-cols-2 gap-4">
-            <StatCard icon="🏥" label="RS Terdaftar" value={verifiedHospitals.length} gradient="from-emerald-500 to-teal-600" />
-            <StatCard icon="⏳" label="RS Pending" value={unverifiedHospitals.length} gradient="from-orange-500 to-amber-600" />
+            <StatCard icon="🏛️" label="PMI Terdaftar" value={verifiedHospitals.length} gradient="from-emerald-500 to-teal-600" />
+            <StatCard icon="⏳" label="PMI Pending" value={unverifiedHospitals.length} gradient="from-orange-500 to-amber-600" />
             <StatCard icon="🧪" label="Stok Karantina" value={quarantineStocks.length} gradient="from-yellow-500 to-amber-500" />
             <StatCard icon="📅" label="Jadwal Pending" value={pendingSchedules.length} gradient="from-blue-500 to-indigo-600" />
           </div>
@@ -130,20 +130,20 @@ export default function AdminDashboard() {
       </section>
 
       {/* 2. Verifikasi RS Baru */}
-      <Card title={`Verifikasi RS Baru (${unverifiedHospitals.length})`}
+      <Card title={`Verifikasi PMI Baru (${unverifiedHospitals.length})`}
         subtitle="RS baru daftar yang menunggu approval Anda"
         icon={<Icons.Search />}>
         {loading ? <LoadingRows /> : unverifiedHospitals.length === 0 ? (
-          <EmptyState icon="✨" title="Semua antrean RS kosong" description="Tidak ada RS baru menunggu verifikasi." />
+          <EmptyState icon="✨" title="Semua antrean PMI kosong" description="Tidak ada PMI baru menunggu verifikasi." />
         ) : (
           <div className="space-y-2">
             {unverifiedHospitals.map((h) => (
               <div key={h.id} className="flex items-center justify-between p-4 bg-white border rounded-xl hover:shadow-sm transition">
                 <div>
-                  <p className="font-semibold">{h.hospitalName}</p>
+                  <p className="font-semibold">{h.pmiName}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">{h.hospitalCode}</code>
-                    {" · "}{h.hospitalLoc}{" · "}{h.user?.city}
+                    <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">{h.pmiCode}</code>
+                    {" · "}{h.pmiLoc}{" · "}{h.user?.city}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -156,26 +156,25 @@ export default function AdminDashboard() {
         )}
       </Card>
 
-      {/* 3. Manajemen RS Aktif (FITUR BARU UNTUK SUSPEND RS) */}
-      <Card title={`Manajemen RS Aktif (${verifiedHospitals.length})`}
-        subtitle="Daftar Rumah Sakit yang sudah beroperasi di sistem"
+      {/* 3. Manajemen PMI Aktif */}
+      <Card title={`Manajemen PMI Aktif (${verifiedHospitals.length})`}
+        subtitle="Daftar PMI yang sudah beroperasi di sistem"
         icon={<Icons.Shield />}>
         {loading ? <LoadingRows /> : verifiedHospitals.length === 0 ? (
-          <EmptyState icon="🏥" title="Belum ada RS Aktif" description="Silakan verifikasi RS terlebih dahulu." />
+          <EmptyState icon="🏛️" title="Belum ada PMI Aktif" description="Silakan verifikasi PMI terlebih dahulu." />
         ) : (
           <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
             {verifiedHospitals.map((h) => (
               <div key={h.id} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-slate-700">{h.hospitalName}</p>
+                    <p className="font-semibold text-slate-700">{h.pmiName}</p>
                     <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-bold">VERIFIED</span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{h.hospitalLoc} · {h.user?.email}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{h.pmiLoc} · {h.user?.email}</p>
                 </div>
-                {/* Tombol Suspend Darurat */}
                 <Button variant="danger" size="sm" icon={<Icons.X />} onClick={() => verifyHospital(h.id, "SUSPENDED")}>
-                  Suspend RS
+                  Suspend PMI
                 </Button>
               </div>
             ))}
@@ -183,9 +182,9 @@ export default function AdminDashboard() {
         )}
       </Card>
 
-      {/* 4. Verifikasi Stok Darah (YANG SEMPAT HILANG) */}
+      {/* 4. Verifikasi Stok Darah */}
       <Card title={`Verifikasi Stok Darah Quarantine (${quarantineStocks.length})`}
-        subtitle="Stok baru dari RS, butuh uji lab sebelum AVAILABLE"
+        subtitle="Stok baru dari PMI, butuh uji lab sebelum AVAILABLE"
         icon={<Icons.Drop />}>
         {loading ? <LoadingRows /> : quarantineStocks.length === 0 ? (
           <EmptyState icon="🎉" title="Tidak ada stok karantina" description="Semua stok darah sudah diverifikasi." />
@@ -194,13 +193,13 @@ export default function AdminDashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
-                  <th className="py-2">RS</th><th>Golongan</th><th>Komponen</th><th>Qty</th><th>Expiry</th><th>Aksi</th>
+                  <th className="py-2">PMI</th><th>Golongan</th><th>Komponen</th><th>Qty</th><th>Expiry</th><th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {quarantineStocks.map((s) => (
                   <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="py-3 font-medium">{s.hospital?.hospitalName ?? "-"}</td>
+                    <td className="py-3 font-medium">{s.pmi?.pmiName ?? "-"}</td>
                     <td>
                       <span className="font-bold text-red-600">{s.bloodType}{s.rhesusType === "POSITIVE" ? "+" : "-"}</span>
                     </td>
@@ -266,7 +265,7 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <p className="font-medium">{r.quantity} kantong ({r.component})</p>
-                    <p className="text-xs text-slate-500">Dari: {r.patient?.user?.name ?? r.hospital?.hospitalName ?? "-"}</p>
+                    <p className="text-xs text-slate-500">Dari: {r.patient?.user?.name ?? r.acceptedByPmi?.pmiName ?? "-"}</p>
                   </div>
                 </div>
                 <Button size="sm" icon={<Icons.Refresh />} onClick={() => retryMatch(r.id)}>Re-run Match</Button>
@@ -277,7 +276,7 @@ export default function AdminDashboard() {
       </Card>
 
       {/* 7. Live Feed Permintaan Darah */}
-      <Card title="Live Feed Permintaan Darah" subtitle="Pantau antrean request dari seluruh rumah sakit secara real-time" icon={<Icons.Refresh />}>
+      <Card title="Live Feed Permintaan Darah" subtitle="Pantau antrean request dari seluruh PMI secara real-time" icon={<Icons.Refresh />}>
         {loading ? <LoadingRows /> : liveRequests.length === 0 ? (
            <EmptyState icon="📡" title="Sistem Tenang" description="Belum ada aktivitas request terbaru." />
         ) : (
@@ -298,7 +297,7 @@ export default function AdminDashboard() {
                       <div className="font-mono text-xs text-slate-400">#{req.id.slice(0,8)}</div>
                       <div className="text-xs text-slate-500 mt-1">Baru saja</div>
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-700">{req.hospital?.hospitalName || "Pasien Mandiri"}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700">{req.patient?.user?.name || req.acceptedByPmi?.pmiName || "Pasien Mandiri"}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border border-red-200 text-red-700 bg-red-50">
                         {req.bloodType}{req.rhesusType === "POSITIVE" ? "+" : "-"}

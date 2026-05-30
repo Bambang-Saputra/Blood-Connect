@@ -22,7 +22,7 @@ type Me = {
   availableModes?: string[];
   pendonor?: { bloodType: string; rhesusType: string; isEligible: boolean; weight?: number };
   pasien?: { nik?: string };
-  rumahSakit?: { hospitalName: string; hospitalCode: string; hospitalLoc: string; status: string };
+  pmi?: { pmiName: string; pmiCode: string; pmiLoc: string; status: string };
 };
 
 export default function ProfilePage() {
@@ -89,7 +89,7 @@ export default function ProfilePage() {
   }
 
   const roleEmoji: Record<string, string> = {
-    PENDONOR: "💉", PASIEN: "🩺", RUMAH_SAKIT: "🏥", ADMIN: "🛡️",
+    PENDONOR: "💉", PASIEN: "🩺", PMI: "🏛️", ADMIN: "🛡️",
   };
   const initials = me.name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
@@ -123,9 +123,9 @@ export default function ProfilePage() {
                     {me.pendonor.isEligible ? " · Eligible" : " · Belum eligible"}
                   </span>
                 )}
-                {me.rumahSakit && (
+                {me.pmi && (
                   <span className="bg-white/20 backdrop-blur-sm border border-white/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                    {me.rumahSakit.hospitalName} ({me.rumahSakit.status})
+                    {me.pmi.pmiName} ({me.pmi.status})
                   </span>
                 )}
               </div>
@@ -147,7 +147,7 @@ export default function ProfilePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Nama Lengkap" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
               <Field label="No HP" value={form.phoneNum} onChange={(v) => setForm({ ...form, phoneNum: v })} required />
-              {me.role !== "RUMAH_SAKIT" && (
+                  {me.role !== "PMI" && (
                 <Field label="Tanggal Lahir" type="date" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} />
               )}
               <RegionPicker
