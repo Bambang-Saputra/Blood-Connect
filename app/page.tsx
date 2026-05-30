@@ -76,7 +76,7 @@ function Hero() {
           </h1>
 
           <p className="mt-6 text-lg text-slate-600 max-w-lg">
-            Sistem terpusat yang menghubungkan <strong>Pendonor</strong>, <strong>Pasien</strong>, dan <strong>Rumah Sakit</strong> secara real-time.
+            Sistem terpusat yang menghubungkan <strong>Pendonor</strong>, <strong>Pasien</strong>, dan <strong>PMI</strong> secara real-time.
             Tidak perlu lagi cari donor lewat media sosial.
           </p>
 
@@ -123,7 +123,7 @@ function Hero() {
 function Stats() {
   const stats = [
     { value: "10.000+", label: "Pendonor Aktif", icon: "👥" },
-    { value: "500+", label: "Rumah Sakit Partner", icon: "🏥" },
+    { value: "500+", label: "PMI / UTD Partner", icon: "🏛️" },
     { value: "25.000+", label: "Nyawa Terselamatkan", icon: "❤️" },
     { value: "38", label: "Provinsi Terjangkau", icon: "📍" },
   ];
@@ -204,8 +204,8 @@ function Roles() {
   const roles = [
     { icon: "💉", title: "Pendonor", desc: "Lacak riwayat donasi, dapatkan reminder jadwal, dan responi permintaan darurat di sekitar Anda.", color: "bg-red-50 border-red-200" },
     { icon: "🩺", title: "Pasien", desc: "Ajukan permintaan darah dalam hitungan detik. MatchSystem otomatis cari stok terdekat untuk Anda.", color: "bg-pink-50 border-pink-200" },
-    { icon: "🏥", title: "Rumah Sakit", desc: "Kelola stok darah, validasi pendonor, dan koordinasikan permintaan dengan jaringan RS nasional.", color: "bg-orange-50 border-orange-200" },
-    { icon: "🛡️", title: "Admin", desc: "Awasi distribusi nasional, verifikasi RS, dan kelola integritas data dengan audit log lengkap.", color: "bg-slate-50 border-slate-200" },
+    { icon: "🏛️", title: "PMI / UTD", desc: "Kelola stok darah, terima jadwal donor, dan akui permintaan pasien lewat jaringan nasional.", color: "bg-orange-50 border-orange-200" },
+    { icon: "🛡️", title: "Admin", desc: "Awasi distribusi nasional, verifikasi PMI, dan kelola integritas data dengan audit log lengkap.", color: "bg-slate-50 border-slate-200" },
   ];
 
   return (

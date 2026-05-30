@@ -8,7 +8,9 @@ import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
 /**
- * DASHBOARD: RUMAH SAKIT
+ * DASHBOARD: PMI
+ * Catatan: panel donor schedule + stock chart akan ditambahkan
+ * di commit berikutnya. Saat ini fokus rebrand UI + endpoint paths.
  */
 
 type Req = {
@@ -62,12 +64,12 @@ export default function HospitalDashboard() {
       <header className="flex flex-wrap gap-4 justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-red-700 to-rose-500 bg-clip-text text-transparent">
-            Dashboard Rumah Sakit
+            Dashboard PMI
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Kelola stok darah & permintaan dari pasien</p>
+          <p className="text-sm text-slate-500 mt-1">Kelola stok darah, permintaan pasien, & jadwal donor</p>
         </div>
         <div className="flex gap-2 items-center">
-          <Link href="/dashboard/hospital/checkup">
+          <Link href="/dashboard/pmi/checkup">
             <Button size="sm" icon={<Icons.Plus />}>Pemeriksaan Donor</Button>
           </Link>
           <Button variant="success" size="sm" icon={showAddStock ? <Icons.X /> : <Icons.Plus />}

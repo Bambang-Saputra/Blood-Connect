@@ -236,7 +236,7 @@ export default function DonorDashboard() {
                       <Badge status={r.urgency} />
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
-                      📍 {r.proximity} · {r.patient?.user?.city ?? r.hospital?.hospitalName ?? "-"}
+                      📍 {r.proximity} · {r.patient?.user?.city ?? r.acceptedByPmi?.pmiName ?? "-"}
                     </p>
                     {r.reason && <p className="text-xs text-slate-600 mt-1 italic">"{r.reason}"</p>}
                   </div>

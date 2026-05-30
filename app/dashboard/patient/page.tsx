@@ -10,13 +10,21 @@ import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
 /**
  * DASHBOARD: PASIEN
- * Use Cases: REQUEST, TRACK REQUEST, CHECK AVAILABILITY
+ * Pasien submit request → broadcast ke semua PMI.
+ * Urgency BUKAN input pasien — dihitung server dari stok PMI.
  */
 export default function PatientDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ bloodType: "O", rhesusType: "POSITIVE", quantity: "1", urgency: "NORMAL" });
+  const [form, setForm] = useState({
+    bloodType: "O",
+    rhesusType: "POSITIVE",
+    quantity: "1",
+    targetHospitalName: "",
+    targetHospitalAddress: "",
+    reason: "",
+  });
 
   useEffect(() => { refresh(); }, []);
 
@@ -29,19 +37,36 @@ export default function PatientDashboard() {
 
   async function submitRequest(e: React.FormEvent) {
     e.preventDefault();
+    // Defense in depth: HTML min=1 + JS guard + server validation
     const qty = Number(form.quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
-      toast.error("Jumlah kantong harus angka positif");
+      toast.error("Jumlah kantong harus angka bulat positif (minimal 1)");
+      return;
+    }
+    if (!form.targetHospitalName.trim()) {
+      toast.error("Nama RS tujuan kirim wajib diisi");
       return;
     }
     setSubmitting(true);
     const res = await api("/requests", {
       method: "POST",
-      body: JSON.stringify({ ...form, quantity: qty }),
+      body: JSON.stringify({
+        bloodType: form.bloodType,
+        rhesusType: form.rhesusType,
+        quantity: qty,
+        targetHospitalName: form.targetHospitalName,
+        targetHospitalAddress: form.targetHospitalAddress || undefined,
+        reason: form.reason || undefined,
+      }),
     });
     setSubmitting(false);
-    if (res.ok) { toast.success("Permintaan dikirim. MatchSystem memproses..."); refresh(); }
-    else toast.error((await res.json()).error ?? "Gagal mengirim permintaan");
+    if (res.ok) {
+      toast.success("Permintaan dikirim ke semua PMI nasional");
+      setForm((f) => ({ ...f, quantity: "1", reason: "" }));
+      refresh();
+    } else {
+      toast.error((await res.json()).error ?? "Gagal mengirim permintaan");
+    }
   }
 
   const activeCount = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus)).length;
@@ -80,12 +105,12 @@ export default function PatientDashboard() {
       {/* Form Request */}
       <Card
         title="Ajukan Permintaan Darah"
-        subtitle="MatchSystem akan otomatis mencocokkan dengan stok atau pendonor"
+        subtitle="Broadcast ke semua PMI nasional — PMI pertama yang accept akan memproses"
         icon={<Icons.Drop />}
         variant="highlight"
       >
         <form onSubmit={submitRequest} className="space-y-4">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <SelectField label="Golongan Darah" value={form.bloodType}
               onChange={(v) => setForm({ ...form, bloodType: v })}
               options={[["A", "A"], ["B", "B"], ["AB", "AB"], ["O", "O"]]} />
@@ -95,23 +120,61 @@ export default function PatientDashboard() {
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Jumlah Kantong</label>
               <input
-                type="number" min={1} step={1}
+                type="number" min={1} step={1} required
                 value={form.quantity}
                 onChange={(e) => {
-                  const v = e.target.value.replace(/^0+(?=\d)/, "");
-                  setForm({ ...form, quantity: v });
+                  // Strip leading zeros + reject negative on input.
+                  const raw = e.target.value.replace(/^0+(?=\d)/, "").replace(/-/g, "");
+                  setForm({ ...form, quantity: raw });
+                }}
+                onBlur={() => {
+                  const n = Number(form.quantity);
+                  if (!Number.isInteger(n) || n < 1) {
+                    setForm((f) => ({ ...f, quantity: "1" }));
+                  }
                 }}
                 onFocus={(e) => e.target.select()}
                 className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
                 placeholder="1"
               />
+              <p className="text-[10px] text-slate-400 mt-0.5">Minimal 1 kantong</p>
             </div>
-            <SelectField label="Urgency" value={form.urgency}
-              onChange={(v) => setForm({ ...form, urgency: v })}
-              options={[["NORMAL", "🟢 Normal"], ["URGENT", "🟠 Urgent"], ["CRITICAL", "🔴 Critical"]]} />
           </div>
+
+          {/* RS tujuan kirim — replacement untuk urgency input */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">🏥 RS Tujuan Kirim</p>
+            <div className="grid md:grid-cols-2 gap-2">
+              <input
+                type="text" required
+                value={form.targetHospitalName}
+                onChange={(e) => setForm({ ...form, targetHospitalName: e.target.value })}
+                placeholder="Nama RS tempat pasien dirawat"
+                className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+              />
+              <input
+                type="text"
+                value={form.targetHospitalAddress}
+                onChange={(e) => setForm({ ...form, targetHospitalAddress: e.target.value })}
+                placeholder="Alamat RS (opsional)"
+                className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+              />
+            </div>
+            <p className="text-[10px] text-blue-700">PMI akan mengantar darah ke alamat ini setelah accept request.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Alasan / Keterangan (opsional)</label>
+            <textarea
+              rows={2} value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              placeholder="Contoh: Pasca operasi caesar, perlu transfusi"
+              className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition text-sm resize-none"
+            />
+          </div>
+
           <Button type="submit" loading={submitting} fullWidth size="lg" icon={<Icons.Heart />}>
-            Kirim Permintaan
+            Kirim Permintaan ke Semua PMI
           </Button>
         </form>
       </Card>
@@ -126,7 +189,7 @@ export default function PatientDashboard() {
           <EmptyState
             icon="📭"
             title="Belum ada permintaan"
-            description="Ajukan permintaan darah lewat form di atas. Sistem akan memprosesnya secara otomatis."
+            description="Ajukan permintaan darah lewat form di atas."
           />
         ) : (
           <div className="space-y-2">
@@ -140,12 +203,16 @@ export default function PatientDashboard() {
                   <div>
                     <p className="font-semibold text-slate-900">{r.quantity} kantong</p>
                     <p className="text-xs text-slate-500 mt-0.5">
+                      🏥 {r.targetHospitalName ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
                       {new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                      {r.acceptedByPmi && <> · diterima {r.acceptedByPmi.pmiName}</>}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge status={r.urgency} />
+                  <UrgencyBadge urgency={r.urgency} />
                   <Badge status={r.reqStatus} />
                 </div>
               </div>
@@ -180,5 +247,23 @@ function SelectField({ label, value, onChange, options }: {
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </div>
+  );
+}
+
+// Urgency dihitung server-side dari ketersediaan stok PMI.
+// CRITICAL = stok PMI nasional <5 → merah
+// URGENT   = stok <20 → oranye
+// NORMAL   = stok cukup → hijau
+function UrgencyBadge({ urgency }: { urgency: string }) {
+  const cfg: Record<string, { label: string; cls: string }> = {
+    CRITICAL: { label: "🔴 Stok Kritis", cls: "bg-red-100 text-red-700 border-red-200" },
+    URGENT:   { label: "🟠 Stok Tipis",  cls: "bg-amber-100 text-amber-700 border-amber-200" },
+    NORMAL:   { label: "🟢 Stok Cukup",  cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  };
+  const c = cfg[urgency] ?? cfg.NORMAL;
+  return (
+    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${c.cls}`}>
+      {c.label}
+    </span>
   );
 }

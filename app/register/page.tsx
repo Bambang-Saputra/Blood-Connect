@@ -21,7 +21,6 @@ export default function RegisterPage() {
     province: "", city: "", zone: "", address: "",
     birthDate: "",
     bloodType: "O", rhesusType: "POSITIVE",
-    hospitalName: "", hospitalCode: "", hospitalLoc: "",
   });
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -57,6 +56,7 @@ export default function RegisterPage() {
     }
   }
 
+  // Hanya 2 role di sini — PMI register lewat /pmiregister (institusi terpisah)
   const roleConfig = [
     {
       val: "PENDONOR", label: "Pendonor", emoji: "💉",
@@ -69,12 +69,6 @@ export default function RegisterPage() {
       desc: "Request darah untuk diri sendiri atau anggota keluarga",
       color: "from-blue-500 to-indigo-600",
       lightBg: "bg-blue-50 border-blue-200",
-    },
-    {
-      val: "RUMAH_SAKIT", label: "Rumah Sakit", emoji: "🏥",
-      desc: "Kelola stok darah & koordinasi dengan jaringan RS nasional",
-      color: "from-orange-500 to-amber-600",
-      lightBg: "bg-orange-50 border-orange-200",
     },
   ];
 
@@ -106,7 +100,7 @@ export default function RegisterPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-1">Saya ingin daftar sebagai...</h2>
             <p className="text-sm text-slate-500 mb-6">Pilih peran yang paling sesuai dengan tujuan Anda</p>
 
-            <div className="grid md:grid-cols-3 gap-3">
+            <div className="grid md:grid-cols-2 gap-3">
               {roleConfig.map((r) => {
                 const active = form.role === r.val;
                 return (
@@ -186,18 +180,16 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {form.role !== "RUMAH_SAKIT" && (
-              <div>
-                <h3 className="font-semibold text-slate-900 mb-3">🎂 Tanggal Lahir</h3>
-                <p className="text-xs text-slate-500 mb-2">Wajib untuk validasi usia donor (17–65 tahun)</p>
-                <input
-                  type="date" value={form.birthDate}
-                  onChange={(e) => update("birthDate", e.target.value)}
-                  required={form.role === "PENDONOR"}
-                  className={inputCls}
-                />
-              </div>
-            )}
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-3">🎂 Tanggal Lahir</h3>
+              <p className="text-xs text-slate-500 mb-2">Wajib untuk validasi usia donor (17–65 tahun)</p>
+              <input
+                type="date" value={form.birthDate}
+                onChange={(e) => update("birthDate", e.target.value)}
+                required={form.role === "PENDONOR"}
+                className={inputCls}
+              />
+            </div>
 
             {/* Role-specific */}
             {form.role === "PENDONOR" && (
@@ -222,22 +214,6 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {form.role === "RUMAH_SAKIT" && (
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">🏥 Data Rumah Sakit</h3>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <Input label="Nama Rumah Sakit" value={form.hospitalName} onChange={(v) => update("hospitalName", v)} required />
-                  <Input label="Kode RS (unik)" value={form.hospitalCode} onChange={(v) => update("hospitalCode", v)} required placeholder="RSCM-01" />
-                  <div className="md:col-span-2">
-                    <Input label="Alamat Lengkap RS" value={form.hospitalLoc} onChange={(v) => update("hospitalLoc", v)} required />
-                  </div>
-                </div>
-                <p className="text-xs text-orange-700 mt-3">
-                  ⚠️ Akun RS akan berstatus UNVERIFIED — perlu verifikasi admin sebelum bisa transaksi
-                </p>
-              </div>
-            )}
-
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
                 <span>⚠️</span>
@@ -256,6 +232,12 @@ export default function RegisterPage() {
               Sudah punya akun?{" "}
               <Link href="/login" className="text-red-600 hover:text-red-700 font-semibold hover:underline">
                 Login di sini
+              </Link>
+            </p>
+            <p className="text-center text-xs text-slate-400">
+              Daftar sebagai institusi PMI?{" "}
+              <Link href="/pmiregister" className="text-red-600 hover:underline font-medium">
+                Klik di sini
               </Link>
             </p>
           </form>

@@ -79,8 +79,8 @@ export default function CheckupPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <Link href="/dashboard/hospital" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-red-600 mb-4">
-          ← Dashboard Rumah Sakit
+        <Link href="/dashboard/pmi" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-red-600 mb-4">
+          ← Dashboard PMI
         </Link>
 
         <header className="mb-6">
@@ -187,7 +187,7 @@ export default function CheckupPage() {
               <p className="text-sm text-slate-600 mt-2 max-w-md mx-auto">{result.message}</p>
               <div className="flex gap-2 justify-center mt-6">
                 <Button onClick={resetAll} icon={<Icons.Plus />}>Periksa Pendonor Lain</Button>
-                <Button variant="secondary" onClick={() => router.push("/dashboard/hospital")}>
+                <Button variant="secondary" onClick={() => router.push("/dashboard/pmi")}>
                   Kembali ke Dashboard
                 </Button>
               </div>
