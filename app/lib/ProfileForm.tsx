@@ -2,20 +2,23 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, dashboardPath } from "../../lib/api";
-import { toast } from "../../lib/toast";
-import { RegionPicker } from "../../lib/RegionPicker";
-import { Button, Card, Badge, Icons } from "../../lib/ui";
+import { api, dashboardPath } from "./api";
+import { toast } from "./toast";
+import { RegionPicker } from "./RegionPicker";
+import { Button, Card, Badge, Icons } from "./ui";
 
 /**
- * Use Case: UPDATE PROFIL (Activity Diagram #3)
- * Universal profile page untuk semua role.
- * - Tampilkan data profil saat ini
- * - Edit nama, phone, alamat, city, province, zone, birthDate
- * - Ganti password (opsional)
+ * Shared ProfileForm component.
+ * Setiap per-role profile page wrap component ini dengan:
+ *   - role prop (untuk badge + tampilan)
+ *   - extraSection slot (untuk info role-spesifik)
+ *
+ * Common fields: nama, phone, alamat, region, birthDate, password.
+ * Untuk PENDONOR/PASIEN: tambah Enable Mode section.
+ * PMI: birthDate disembunyikan.
  */
 
-type Me = {
+export type Me = {
   id: string; email: string; name: string; phoneNum: string;
   address?: string | null; city: string; province?: string | null;
   zone?: string | null; birthDate?: string | null; role: string;
@@ -25,7 +28,22 @@ type Me = {
   pmi?: { pmiName: string; pmiCode: string; pmiLoc: string; status: string };
 };
 
-export default function ProfilePage() {
+const roleEmoji: Record<string, string> = {
+  PENDONOR: "💉", PASIEN: "🩺", PMI: "🏛️", ADMIN: "🛡️",
+};
+
+interface ProfileFormProps {
+  /** Untuk validate role di FE (defense in depth) + tampilan */
+  role: string;
+  /** Slot tambahan setelah banner, sebelum form data pribadi */
+  extraSection?: React.ReactNode;
+  /** Override URL "kembali ke dashboard" — default pakai dashboardPath(role) */
+  backTo?: string;
+  /** Override label "kembali" — default "Kembali ke dashboard" */
+  backLabel?: string;
+}
+
+export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFormProps) {
   const [me, setMe] = useState<Me | null>(null);
   const [form, setForm] = useState({
     name: "", phoneNum: "", address: "",
@@ -33,6 +51,7 @@ export default function ProfilePage() {
     birthDate: "", password: "",
   });
   const [saving, setSaving] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -88,10 +107,8 @@ export default function ProfilePage() {
     );
   }
 
-  const roleEmoji: Record<string, string> = {
-    PENDONOR: "💉", PASIEN: "🩺", PMI: "🏛️", ADMIN: "🛡️",
-  };
   const initials = me.name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+  const backHref = backTo ?? dashboardPath(role);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 pb-12">
@@ -101,12 +118,11 @@ export default function ProfilePage() {
         <div className="absolute -bottom-20 -left-20 w-96 h-96 bg-pink-300/10 rounded-full blur-3xl" />
 
         <div className="max-w-4xl mx-auto px-6 lg:px-8 py-8 relative">
-          <Link href={dashboardPath(me.role)} className="inline-flex items-center gap-1 text-sm text-red-100 hover:text-white transition mb-6">
-            ← Kembali ke dashboard
+          <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-red-100 hover:text-white transition mb-6">
+            ← {backLabel ?? "Kembali ke dashboard"}
           </Link>
 
           <div className="flex items-center gap-5">
-            {/* Avatar */}
             <div className="w-20 h-20 lg:w-24 lg:h-24 bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-2xl flex items-center justify-center font-bold text-2xl lg:text-3xl shadow-lg">
               {initials}
             </div>
@@ -117,13 +133,13 @@ export default function ProfilePage() {
                 <span className="bg-white/20 backdrop-blur-sm border border-white/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                   {roleEmoji[me.role]} {me.role}
                 </span>
-                {me.pendonor && (
+                {me.pendonor && role === "PENDONOR" && (
                   <span className="bg-red-900/40 border border-red-300/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                     🩸 {me.pendonor.bloodType}{me.pendonor.rhesusType === "POSITIVE" ? "+" : "-"}
                     {me.pendonor.isEligible ? " · Eligible" : " · Belum eligible"}
                   </span>
                 )}
-                {me.pmi && (
+                {me.pmi && role === "PMI" && (
                   <span className="bg-white/20 backdrop-blur-sm border border-white/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                     {me.pmi.pmiName} ({me.pmi.status})
                   </span>
@@ -136,8 +152,11 @@ export default function ProfilePage() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-6 lg:px-8 -mt-6 space-y-5 relative">
-        {/* === Mode Tambahan === */}
-        {(me.role === "PENDONOR" || me.role === "PASIEN") && (
+        {/* === Extra Section (role-spesifik) === */}
+        {extraSection}
+
+        {/* === Enable Mode (cuma untuk PENDONOR & PASIEN) === */}
+        {(role === "PENDONOR" || role === "PASIEN") && (
           <EnableModeSection me={me} onChanged={load} />
         )}
 
@@ -147,7 +166,7 @@ export default function ProfilePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Nama Lengkap" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
               <Field label="No HP" value={form.phoneNum} onChange={(v) => setForm({ ...form, phoneNum: v })} required />
-                  {me.role !== "PMI" && (
+              {role !== "PMI" && role !== "ADMIN" && (
                 <Field label="Tanggal Lahir" type="date" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} />
               )}
               <RegionPicker
@@ -170,11 +189,22 @@ export default function ProfilePage() {
               <h3 className="font-semibold text-sm text-slate-700 mb-2 flex items-center gap-2">
                 🔐 Ganti Password
               </h3>
-              <Field
-                label="Password Baru (min 8 karakter, kosongkan kalau tidak ganti)"
-                type="password" value={form.password}
-                onChange={(v) => setForm({ ...form, password: v })}
-              />
+              <div className="relative">
+                <input
+                  type={showPwd ? "text" : "password"}
+                  placeholder="Password baru (min 8 karakter, kosongkan kalau tidak ganti)"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full border border-slate-300 px-4 py-2.5 pr-12 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
+                >
+                  {showPwd ? "🙈 Hide" : "👁 Show"}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" loading={saving} size="lg" icon={<Icons.Check />}>
@@ -205,7 +235,8 @@ function Field(p: {
 
 // =====================================================================
 // Section: Enable Mode Tambahan
-// User Pendonor bisa enable Pasien, dan sebaliknya.
+// Pendonor bisa enable Pasien, sebaliknya juga.
+// PMI & Admin TIDAK BOLEH (security — di-block backend juga).
 // =====================================================================
 function EnableModeSection({ me, onChanged }: { me: Me; onChanged: () => void }) {
   const [enabling, setEnabling] = useState<string | null>(null);

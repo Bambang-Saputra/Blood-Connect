@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
+import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons as UIIcons } from "../../lib/ui";
@@ -11,6 +12,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const Icons = { ...UIIcons, Shield: UIIcons.Heart }; 
 
 export default function AdminDashboard() {
+  // Role guard — auto-redirect kalau JWT bukan ADMIN
+  const { me: guardMe, loading: guardLoading } = useRequireRole("ADMIN");
   const [unverifiedHospitals, setUnverifiedHospitals] = useState<any[]>([]);
   const [verifiedHospitals, setVerifiedHospitals] = useState<any[]>([]); // Menyimpan data RS yg sudah verified
   const [pendingSchedules, setPendingSchedules] = useState<any[]>([]);
@@ -18,7 +21,9 @@ export default function AdminDashboard() {
   const [liveRequests, setLiveRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (guardMe) refresh();
+  }, [guardMe]);
 
   async function refresh() {
     setLoading(true);
@@ -58,6 +63,14 @@ export default function AdminDashboard() {
     { name: 'Request Pending', total: stuckRequests.length, color: '#ef4444' },
   ];
 
+  if (guardLoading || !guardMe) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-slate-400 text-sm">Memverifikasi sesi...</div>
+      </main>
+    );
+  }
+
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8 space-y-6">
       <header className="flex flex-wrap gap-4 justify-between items-center">
@@ -69,7 +82,7 @@ export default function AdminDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/admin/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}
