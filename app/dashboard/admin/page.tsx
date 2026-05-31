@@ -13,7 +13,6 @@ const Icons = { ...UIIcons, Shield: UIIcons.Heart };
 export default function AdminDashboard() {
   const [unverifiedHospitals, setUnverifiedHospitals] = useState<any[]>([]);
   const [verifiedHospitals, setVerifiedHospitals] = useState<any[]>([]); // Menyimpan data RS yg sudah verified
-  const [quarantineStocks, setQuarantineStocks] = useState<any[]>([]);
   const [pendingSchedules, setPendingSchedules] = useState<any[]>([]);
   const [stuckRequests, setStuckRequests] = useState<any[]>([]);
   const [liveRequests, setLiveRequests] = useState<any[]>([]);
@@ -23,10 +22,9 @@ export default function AdminDashboard() {
 
   async function refresh() {
     setLoading(true);
-    const [hUnverified, hVerified, q, s, r, allReq] = await Promise.all([
+    const [hUnverified, hVerified, s, r, allReq] = await Promise.all([
       api("/admin/pmis?status=UNVERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/pmis?status=VERIFIED").then((r) => r.json()).catch(() => ({ data: [] })),
-      api("/admin/stocks/quarantine").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/schedules?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/requests?status=PENDING").then((r) => r.json()).catch(() => ({ data: [] })),
       api("/admin/requests").then((r) => r.json()).catch(() => ({ data: [] })),
@@ -34,7 +32,6 @@ export default function AdminDashboard() {
 
     setUnverifiedHospitals(hUnverified.data ?? []);
     setVerifiedHospitals(hVerified.data ?? []);
-    setQuarantineStocks(q.data ?? []);
     setPendingSchedules(s.data ?? []);
     setStuckRequests(r.data ?? []);
     setLiveRequests(allReq.data ?? []);
@@ -48,32 +45,17 @@ export default function AdminDashboard() {
     else toast.error("Gagal mengubah status PMI");
   }
 
-  async function verifyStock(id: string) {
-    const res = await api(`/stocks/${id}/verify`, { method: "PATCH" });
-    if (res.ok) { toast.success("Stok lolos uji & tersedia"); refresh(); }
-    else toast.error("Gagal verify stok");
-  }
-
   async function actSchedule(id: string, status: string, newDate?: string) {
     const res = await api(`/admin/schedules/${id}`, { method: "PATCH", body: JSON.stringify({ status, newDate }) });
     if (res.ok) { toast.success(`Jadwal ${status.toLowerCase()}`); refresh(); }
     else toast.error("Gagal update jadwal");
   }
 
-  async function retryMatch(reqId: string) {
-    const res = await api(`/requests/${reqId}/match`, { method: "POST" });
-    const result = await res.json();
-    if (res.ok) toast.info(`Match: ${result.source} — ${result.message}`);
-    else toast.error("MatchSystem error");
-    refresh();
-  }
-
   const chartData = [
     { name: 'PMI Verified', total: verifiedHospitals.length, color: '#10b981' },
     { name: 'PMI Pending', total: unverifiedHospitals.length, color: '#f97316' },
-    { name: 'Stok Karantina', total: quarantineStocks.length, color: '#eab308' },
     { name: 'Jadwal Pending', total: pendingSchedules.length, color: '#3b82f6' },
-    { name: 'Request Tertahan', total: stuckRequests.length, color: '#ef4444' },
+    { name: 'Request Pending', total: stuckRequests.length, color: '#ef4444' },
   ];
 
   return (
@@ -106,9 +88,9 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 grid grid-cols-2 gap-4">
             <StatCard icon="🏛️" label="PMI Terdaftar" value={verifiedHospitals.length} gradient="from-emerald-500 to-teal-600" />
-            <StatCard icon="⏳" label="PMI Pending" value={unverifiedHospitals.length} gradient="from-orange-500 to-amber-600" />
-            <StatCard icon="🧪" label="Stok Karantina" value={quarantineStocks.length} gradient="from-yellow-500 to-amber-500" />
+            <StatCard icon="⏳" label="PMI Pending Verifikasi" value={unverifiedHospitals.length} gradient="from-orange-500 to-amber-600" />
             <StatCard icon="📅" label="Jadwal Pending" value={pendingSchedules.length} gradient="from-blue-500 to-indigo-600" />
+            <StatCard icon="📋" label="Request Pending" value={stuckRequests.length} gradient="from-red-500 to-rose-600" />
           </div>
           <div className="lg:col-span-2 bg-slate-50 rounded-xl border border-slate-100 p-4 h-72">
             <h3 className="text-sm font-semibold text-slate-600 mb-4">Grafik Beban Sistem</h3>
@@ -182,44 +164,7 @@ export default function AdminDashboard() {
         )}
       </Card>
 
-      {/* 4. Verifikasi Stok Darah */}
-      <Card title={`Verifikasi Stok Darah Quarantine (${quarantineStocks.length})`}
-        subtitle="Stok baru dari PMI, butuh uji lab sebelum AVAILABLE"
-        icon={<Icons.Drop />}>
-        {loading ? <LoadingRows /> : quarantineStocks.length === 0 ? (
-          <EmptyState icon="🎉" title="Tidak ada stok karantina" description="Semua stok darah sudah diverifikasi." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
-                  <th className="py-2">PMI</th><th>Golongan</th><th>Komponen</th><th>Qty</th><th>Expiry</th><th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quarantineStocks.map((s) => (
-                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="py-3 font-medium">{s.pmi?.pmiName ?? "-"}</td>
-                    <td>
-                      <span className="font-bold text-red-600">{s.bloodType}{s.rhesusType === "POSITIVE" ? "+" : "-"}</span>
-                    </td>
-                    <td className="text-xs text-slate-600">{s.component}</td>
-                    <td className="font-medium">{s.quantity}</td>
-                    <td className="text-xs text-slate-600">
-                      {new Date(s.expiryDate).toLocaleDateString("id-ID")}
-                    </td>
-                    <td>
-                      <Button variant="success" size="sm" icon={<Icons.Check />} onClick={() => verifyStock(s.id)}>Approve</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* 5. Jadwal Donor Pending (YANG SEMPAT HILANG) */}
+      {/* 4. Jadwal Donor Pending */}
       <Card title={`Jadwal Donor Pending (${pendingSchedules.length})`}
         subtitle="Pendonor yang menunggu konfirmasi jadwal"
         icon={<Icons.Calendar />}>
@@ -249,33 +194,7 @@ export default function AdminDashboard() {
         )}
       </Card>
 
-      {/* 6. Request Tertahan (YANG SEMPAT HILANG) */}
-      <Card title={`Request Tertahan (${stuckRequests.length})`}
-        subtitle="Request yang stuck di PENDING — re-run MatchSystem manual"
-        icon={<Icons.Refresh />}>
-        {loading ? <LoadingRows /> : stuckRequests.length === 0 ? (
-          <EmptyState icon="✅" title="Tidak ada request tertahan" />
-        ) : (
-          <div className="space-y-2">
-            {stuckRequests.map((r) => (
-              <div key={r.id} className="flex items-center justify-between p-4 bg-white border rounded-xl hover:shadow-sm transition">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-                    {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
-                  </div>
-                  <div>
-                    <p className="font-medium">{r.quantity} kantong ({r.component})</p>
-                    <p className="text-xs text-slate-500">Dari: {r.patient?.user?.name ?? r.acceptedByPmi?.pmiName ?? "-"}</p>
-                  </div>
-                </div>
-                <Button size="sm" icon={<Icons.Refresh />} onClick={() => retryMatch(r.id)}>Re-run Match</Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* 7. Live Feed Permintaan Darah */}
+      {/* 5. Live Feed Permintaan Darah */}
       <Card title="Live Feed Permintaan Darah" subtitle="Pantau antrean request dari seluruh PMI secara real-time" icon={<Icons.Refresh />}>
         {loading ? <LoadingRows /> : liveRequests.length === 0 ? (
            <EmptyState icon="📡" title="Sistem Tenang" description="Belum ada aktivitas request terbaru." />
