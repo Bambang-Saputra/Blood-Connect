@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
+import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { ModeSwitcher } from "../../lib/ModeSwitcher";
@@ -31,6 +32,8 @@ type Notif = {
 };
 
 export default function DonorDashboard() {
+  // Role guard — auto-redirect kalau JWT bukan PENDONOR
+  const { me: guardMe, loading: guardLoading } = useRequireRole("PENDONOR");
   const [me, setMe] = useState<Me | null>(null);
   const [authMe, setAuthMe] = useState<any>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
@@ -44,7 +47,9 @@ export default function DonorDashboard() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (guardMe) refresh();
+  }, [guardMe]);
 
   async function refresh() {
     const [meRes, authRes, notifRes, histRes, openRes, pmiRes, schedulesRes, broadcastsRes] = await Promise.all([
@@ -129,6 +134,14 @@ export default function DonorDashboard() {
     refresh();
   }
 
+  // Guard belum verify atau lagi loading
+  if (guardLoading || !guardMe) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-slate-400 text-sm">Memverifikasi sesi...</div>
+      </main>
+    );
+  }
   if (!me) return <main className="p-8">Memuat...</main>;
 
   const lastCheckup = me.checkups[0];
@@ -153,7 +166,7 @@ export default function DonorDashboard() {
         <div className="flex items-center gap-2">
           <ModeSwitcher currentRole="PENDONOR" />
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/donor/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}

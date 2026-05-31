@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
+import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
@@ -69,6 +70,8 @@ type Schedule = {
 };
 
 export default function PmiDashboard() {
+  // Role guard — auto-redirect kalau JWT bukan PMI
+  const { me: guardMe, loading: guardLoading } = useRequireRole("PMI");
   const [requests, setRequests] = useState<Req[]>([]);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -78,7 +81,9 @@ export default function PmiDashboard() {
   const [showAddStock, setShowAddStock] = useState(false);
   const [showBroadcastForm, setShowBroadcastForm] = useState(false);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (guardMe) refresh();
+  }, [guardMe]);
 
   async function refresh() {
     setLoading(true);
@@ -126,6 +131,14 @@ export default function PmiDashboard() {
   const pendingSchedules = schedules.filter((s) => s.status === "PENDING").length;
   const openBroadcasts = broadcasts.filter((b) => b.status === "OPEN").length;
 
+  if (guardLoading || !guardMe) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-slate-400 text-sm">Memverifikasi sesi...</div>
+      </main>
+    );
+  }
+
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8 space-y-6">
       <header className="flex flex-wrap gap-4 justify-between items-center">
@@ -145,7 +158,7 @@ export default function PmiDashboard() {
             {showAddStock ? "Tutup" : "Tambah Stok"}
           </Button>
           <NotificationBell />
-          <Link href="/dashboard/profile">
+          <Link href="/dashboard/pmi/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
           </Link>
           <Button variant="ghost" size="sm" icon={<Icons.Logout />}
