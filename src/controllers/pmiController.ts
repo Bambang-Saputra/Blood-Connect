@@ -134,12 +134,24 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
   const screeningPassed = schedule.screening?.passed ?? false;
   const isEligible = checkupPassed && screeningPassed;
 
-  // Build alasan kalau tidak eligible (kasih konteks ke PMI)
+  // Alasan tidak-eligible.
+  //  - scheduleReason : per-event (konteks PMI sudah implisit di schedule).
+  //  - globalReason   : untuk flag GLOBAL donor yang context-free, jadi kita
+  //                     sebutkan PMI + tanggal supaya pesan di profil donor
+  //                     self-explanatory ("kenapa & dari mana penilaiannya").
   const reasons: string[] = [];
   if (!checkupPassed) reasons.push("Cek fisik tidak memenuhi rentang standar");
   if (!screeningPassed) reasons.push("Skrining donor menemukan kontraindikasi");
+  const scheduleReason = reasons.length ? reasons.join("; ") : null;
 
-  // Transaksi: create checkup + link ke schedule + update eligibility
+  const examDateStr = new Date().toLocaleDateString("id-ID", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+  const globalReason = isEligible
+    ? null
+    : `${scheduleReason} — per pemeriksaan ${pmi.pmiName} (${examDateStr})`;
+
+  // Transaksi: create checkup + link ke schedule + refresh cache eligibility donor
   const result = await prisma.$transaction(async (tx) => {
     const checkup = await tx.pemeriksaanDonor.create({
       data: {
@@ -157,25 +169,35 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
       },
     });
 
+    // (1) schedule.isEligible = AUTHORITATIVE per-event. Selalu di-set untuk
+    //     jadwal yang sedang diperiksa — ini "kebenaran" untuk donasi ini.
     const updatedSchedule = await tx.jadwalDonor.update({
       where: { id: schedule.id },
       data: {
         checkupId: checkup.id,
         isEligible,
-        eligibilityReason: reasons.length ? reasons.join("; ") : null,
+        eligibilityReason: scheduleReason,
       },
       include: { checkup: true, screening: true, donor: { include: { user: true } } },
     });
 
-    // Update profil pendonor: berat + eligibility flag
-    await tx.pendonor.update({
-      where: { id: schedule.donorId },
-      data: {
-        weight: d.weight,
-        isEligible,
-        eligibilityReason: reasons.length ? reasons.join("; ") : null,
-      },
+    // (2) pendonor.isEligible = CACHE dari checkup TERBARU donor (by examinedAt).
+    //     Guard: hanya refresh kalau checkup ini memang yang paling baru. Tujuan:
+    //       - global flag selalu mencerminkan kondisi medis termutakhir,
+    //       - tidak "flip-flop" hanya karena urutan eksekusi input antar-PMI
+    //         (checkup lama yang di-input belakangan TIDAK menimpa yang baru).
+    //     schedule.isEligible (poin 1) tetap jadi sumber kebenaran per-jadwal.
+    const latestCheckup = await tx.pemeriksaanDonor.findFirst({
+      where: { donorId: schedule.donorId },
+      orderBy: { examinedAt: "desc" },
+      select: { id: true },
     });
+    if (latestCheckup?.id === checkup.id) {
+      await tx.pendonor.update({
+        where: { id: schedule.donorId },
+        data: { weight: d.weight, isEligible, eligibilityReason: globalReason },
+      });
+    }
 
     return { checkup, schedule: updatedSchedule };
   });
