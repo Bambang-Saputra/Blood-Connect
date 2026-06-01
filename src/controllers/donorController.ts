@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { checkEligible } from "../services/eligibilityService";
 import { AuthedRequest } from "../middleware/auth";
@@ -61,21 +62,42 @@ export async function createSchedule(req: AuthedRequest, res: Response) {
     });
   }
 
-  const schedule = await prisma.jadwalDonor.create({
-    data: {
-      donorId: donor.id,
-      pmiId: parsed.data.pmiId,
-      jadwal: new Date(parsed.data.jadwal),
-      sesi: parsed.data.sesi,
-      status: ScheduleStatus.PENDING,
-      screeningId: latestScreening.id,
-    },
-  });
+  // Defense-in-depth: tangkap Prisma error supaya server tidak crash
+  // kalau ada unexpected constraint violation (mis. race condition,
+  // schema drift, atau bug schema lain).
+  try {
+    const schedule = await prisma.jadwalDonor.create({
+      data: {
+        donorId: donor.id,
+        pmiId: parsed.data.pmiId,
+        jadwal: new Date(parsed.data.jadwal),
+        sesi: parsed.data.sesi,
+        status: ScheduleStatus.PENDING,
+        screeningId: latestScreening.id,
+      },
+    });
 
-  return res.status(201).json({
-    message: "Pendaftaran jadwal donor berhasil. PMI akan melakukan cek fisik saat hari H.",
-    schedule,
-  });
+    return res.status(201).json({
+      message: "Pendaftaran jadwal donor berhasil. PMI akan melakukan cek fisik saat hari H.",
+      schedule,
+    });
+  } catch (err) {
+    // P2002 = unique constraint violation
+    // P2003 = foreign key constraint violation
+    // P2025 = record not found (relation missing)
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("[createSchedule] Prisma error", err.code, err.meta);
+      const userMessage =
+        err.code === "P2002"
+          ? "Jadwal duplikat — sudah ada jadwal yang sama persis. Coba tanggal lain."
+          : err.code === "P2003"
+          ? "Data terkait tidak ditemukan. Refresh dan coba lagi."
+          : "Terjadi masalah saat menyimpan jadwal. Coba lagi sebentar lagi.";
+      return res.status(400).json({ error: userMessage, code: err.code });
+    }
+    // Re-throw unknown errors to global handler
+    throw err;
+  }
 }
 
 // GET /api/donor/schedules — list jadwal milik donor sendiri

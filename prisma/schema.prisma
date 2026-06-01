@@ -217,8 +217,9 @@ model ScreeningAnswer {
 
   passed        Boolean
 
-  // Reverse relation: 1 screening bisa dipakai 1 jadwal
-  jadwal        JadwalDonor?
+  // Reverse relation: 1 screening bisa dipakai beberapa jadwal
+  // (donor daftar di multi PMI memakai screening yang sama).
+  jadwals       JadwalDonor[]
 }
 
 // ---------------------------------------------------------------------
@@ -373,8 +374,10 @@ model JadwalDonor {
   newDate     DateTime?
   note        String?
 
-  // Resume skrining donor yang dipakai untuk jadwal ini
-  screeningId String?        @unique
+  // Resume skrining donor yang dipakai untuk jadwal ini.
+  // TIDAK @unique — 1 screening bisa dipakai untuk multiple schedule
+  // (donor boleh daftar di beberapa PMI selama screening masih berlaku).
+  screeningId String?
   screening   ScreeningAnswer? @relation(fields: [screeningId], references: [id])
 
   // Hasil cek fisik PMI untuk jadwal ini
