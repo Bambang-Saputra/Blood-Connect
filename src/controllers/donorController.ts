@@ -6,6 +6,7 @@ import { checkEligible } from "../services/eligibilityService";
 import { AuthedRequest } from "../middleware/auth";
 import { NotificationType, ScheduleStatus } from "@prisma/client";
 import { notifyUser } from "../lib/notification";
+import { recipientTypesForDonor } from "../lib/bloodCompat";
 
 /**
  * CONTROLLER: Pendonor
@@ -336,19 +337,19 @@ export async function listNearbyBroadcasts(req: AuthedRequest, res: Response) {
   });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
-  const donorIsUniversal = donor.bloodType === "O" && donor.rhesusType === "NEGATIVE";
+  // Donor lihat broadcast yang relevant untuknya: yaitu broadcast yang
+  // recipientType nya bisa di-fulfill oleh donor ini.
+  // Contoh: donor O+ lihat broadcast minta O+, A+, B+, AB+ (semua yang dia bisa give to).
+  const compatibleRecipientTypes = recipientTypesForDonor(
+    donor.bloodType,
+    donor.rhesusType,
+  );
 
   const broadcasts = await prisma.pmiBroadcast.findMany({
     where: {
       status: "OPEN",
       pmi: { user: { city: donor.user.city }, status: "VERIFIED" },
-      ...(donorIsUniversal
-        ? {} // O- bisa donor ke semua
-        : {
-            // Non-universal: exact match golongan
-            bloodType: donor.bloodType,
-            rhesusType: donor.rhesusType,
-          }),
+      OR: compatibleRecipientTypes,
     },
     include: {
       pmi: { select: { id: true, pmiName: true, pmiLoc: true } },

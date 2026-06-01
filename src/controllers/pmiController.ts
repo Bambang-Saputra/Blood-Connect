@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { AuthedRequest } from "../middleware/auth";
 import { notifyUser } from "../lib/notification";
 import { writeAudit } from "../lib/audit";
+import { donorTypesForRecipient, bloodKey } from "../lib/bloodCompat";
 
 /**
  * =====================================================================
@@ -254,14 +255,6 @@ const broadcastSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
 
-// Donor X bisa donor ke recipient golongan Y kalau donor.golongan in COMPAT[Y]
-// Tapi karena PMI minta stok untuk golongan Y, kita cari donor yang
-// GOLONGANNYA Y atau yang BISA donor ke Y (universal donor).
-//
-// Untuk simplifikasi MVP: kita match exact golongan dulu (donor O+ untuk PMI minta O+).
-// Plus universal donor (O- bisa untuk semua recipient).
-const UNIVERSAL_DONOR_KEY = "O-";
-
 export async function createBroadcast(req: AuthedRequest, res: Response) {
   const parsed = broadcastSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -287,27 +280,26 @@ export async function createBroadcast(req: AuthedRequest, res: Response) {
     },
   });
 
-  // Find target donors: kota sama dengan PMI + golongan compatible + active
-  const targetKey = `${parsed.data.bloodType}${parsed.data.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  // Target donors: SEMUA donor type yang bisa donate ke recipient yang diminta.
+  // Pakai bloodCompat matrix biar coverage donor maksimal (bukan cuma exact + O-).
+  // Contoh: PMI minta A+ → notify donor A+, A-, O+, O- di kota tersebut.
+  const compatibleDonorTypes = donorTypesForRecipient(
+    parsed.data.bloodType,
+    parsed.data.rhesusType,
+  );
+
   const candidates = await prisma.pendonor.findMany({
     where: {
       isActive: true,
       user: { city: pmiCity },
-      OR: [
-        // Exact golongan
-        { bloodType: parsed.data.bloodType, rhesusType: parsed.data.rhesusType },
-        // Universal donor (O-) untuk semua recipient
-        ...(targetKey !== UNIVERSAL_DONOR_KEY
-          ? [{ bloodType: "O" as const, rhesusType: "NEGATIVE" as const }]
-          : []),
-      ],
+      OR: compatibleDonorTypes,
     },
     include: { user: { select: { email: true, name: true, id: true } } },
     take: 200,
   });
 
   // Fire-and-forget notifikasi — supaya respons cepat
-  const golonganLabel = `${parsed.data.bloodType}${parsed.data.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  const golonganLabel = bloodKey(parsed.data.bloodType, parsed.data.rhesusType);
   Promise.all(
     candidates.map((c) =>
       notifyUser({
