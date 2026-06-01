@@ -248,8 +248,14 @@ export async function listOpenRequests(req: AuthedRequest, res: Response) {
 export async function volunteerForRequest(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
-  if (!donor.isEligible) {
-    return res.status(400).json({ error: "Anda belum eligible. Lakukan checkEligible dulu." });
+
+  // Real-world: "volunteer" = MENYATAKAN KESEDIAAN, bukan jaminan layak donor.
+  // Sesuai praktik PMI, kelayakan medis (Hb, tensi, berat, dll) diverifikasi
+  // saat donor datang ke PMI untuk donasi — BUKAN prasyarat untuk menyatakan minat.
+  // Maka kita TIDAK menggerbang dengan isEligible (hasil checkup terakhir).
+  // Cukup pastikan akun donor aktif (tidak di-nonaktifkan admin).
+  if (!donor.isActive) {
+    return res.status(403).json({ error: "Akun donor Anda sedang non-aktif. Hubungi admin." });
   }
 
   const request = await prisma.permintaanDonor.findUnique({

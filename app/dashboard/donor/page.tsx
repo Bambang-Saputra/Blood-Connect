@@ -396,7 +396,7 @@ export default function DonorDashboard() {
 
       {/* Browse Open Requests — Proaktif */}
       <Card title={`Permintaan Tersedia (${openRequests.length})`}
-        subtitle="Semua permintaan kompatibel dengan golongan darah Anda — volunteer proaktif"
+        subtitle="Kompatibel dengan golongan darah Anda. Kelayakan final (Hb, tensi, dll) diperiksa di PMI saat donasi."
         icon={<Icons.Drop />}>
         {openRequests.length === 0 ? (
           <EmptyState icon="🎉"
@@ -422,11 +422,7 @@ export default function DonorDashboard() {
                     {r.reason && <p className="text-xs text-slate-600 mt-1 italic">"{r.reason}"</p>}
                   </div>
                 </div>
-                {me.isEligible ? (
-                  <Button size="sm" icon={<Icons.Heart />} onClick={() => volunteer(r.id)}>Bersedia</Button>
-                ) : (
-                  <span className="text-xs text-slate-400 italic">Eligible dulu</span>
-                )}
+                <Button size="sm" icon={<Icons.Heart />} onClick={() => volunteer(r.id)}>Bersedia</Button>
               </div>
             ))}
           </div>
