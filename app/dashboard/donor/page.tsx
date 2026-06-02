@@ -109,8 +109,10 @@ export default function DonorDashboard() {
   if (!me) return <main className="p-8">Memuat...</main>;
   
 
-  const lastScreening = me.screenings[0];
+  const lastScreening = me.screenings?.[0];
+  const hasScreening = !!lastScreening; // Ngecek apakah user udah pernah ngisi (apapun hasilnya)
   const hasPassedScreening = lastScreening?.passed === true;
+  const isCooldown = hasScreening && !hasPassedScreening; // Udah ngisi, TAPI nggak lulus
 
   return (
     /* INI KANVAS BACKGROUND-NYA (Tag DIV baru) */
@@ -178,33 +180,50 @@ export default function DonorDashboard() {
           </div>
         </header>
 
-        {/* SKRINING BANNER (Tetap Sama) */}
+        {/* SKRINING BANNER */}
         <section className="relative overflow-hidden rounded-3xl shadow-sm">
           <div className={`absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]`}></div>
+          
+          {/* Pewarnaan Background Berdasarkan 3 State */}
           <div className={`relative p-8 flex flex-col md:flex-row items-center justify-between gap-6 transition-all ${
             hasPassedScreening 
               ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white" 
+              : isCooldown
+              ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white"
               : "bg-gradient-to-r from-slate-800 to-slate-900 text-white"
           }`}>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <span className={`px-3 py-1 text-xs font-bold rounded-full ${hasPassedScreening ? "bg-white/20" : "bg-rose-500/20 text-rose-300"}`}>
+                {/* Badge Step 1 */}
+                <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                  hasScreening ? "bg-white/20" : "bg-rose-500/20 text-rose-300"
+                }`}>
                   STEP 1: SKRINING KESEHATAN
                 </span>
               </div>
+              
+              {/* Judul Banner Berdasarkan 3 State */}
               <h2 className="text-2xl font-bold mb-2">
-                {hasPassedScreening ? "Mantap! Anda Layak Donor 🎉" : "Kuesioner Skrining Belum Lengkap"}
+                {hasPassedScreening ? "Mantap! Anda Layak Donor 🎉" 
+                  : isCooldown ? "Anda Sedang Dalam Masa Tunggu ⏳" 
+                  : "Kuesioner Skrining Belum Lengkap"}
               </h2>
+              
+              {/* Deskripsi Banner */}
               <p className="text-sm opacity-90 max-w-xl">
                 {hasPassedScreening 
-                  ? "Anda telah lolos skrining awal. Silakan pilih PMI terdekat di bawah ini untuk mendaftarkan jadwal donor darah Anda. Pemeriksaan fisik lanjutan akan dilakukan di lokasi."
+                  ? "Anda telah lolos skrining awal. Silakan pilih PMI terdekat di bawah ini untuk mendaftarkan jadwal donor darah Anda."
+                  : isCooldown 
+                  ? (me.eligibilityReason || "Berdasarkan kondisi kesehatan, Anda harus menunggu beberapa saat sebelum bisa mendonorkan darah kembali.")
                   : "Sebelum mendaftar jadwal donor, Anda diwajibkan untuk mengisi 8 pertanyaan kesehatan standar PMI untuk memastikan kelayakan awal."}
               </p>
             </div>
+            
+            {/* Tombol Aksi */}
             <div className="shrink-0">
               <Link href="/dashboard/donor/screening">
-                <Button size="lg" variant={hasPassedScreening ? "secondary" : "primary"} className="shadow-xl">
-                  {hasPassedScreening ? "Lihat Hasil Skrining" : "Isi Kuesioner Sekarang"}
+                <Button size="lg" variant={hasScreening ? "secondary" : "primary"} className="shadow-xl">
+                  {hasScreening ? "Lihat Hasil Skrining" : "Isi Kuesioner Sekarang"}
                 </Button>
               </Link>
             </div>
