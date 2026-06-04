@@ -62,9 +62,35 @@ const registerSchema = z.object({
   rhesusType: z.enum(["POSITIVE", "NEGATIVE"]).optional(),
 });
 
+// Hitung umur (tahun penuh) dari tanggal lahir.
+function calcAge(birthDate: Date): number {
+  const now = new Date();
+  let age = now.getFullYear() - birthDate.getFullYear();
+  const m = now.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birthDate.getDate())) age--;
+  return age;
+}
+
+const DONOR_MIN_AGE = 17;
+const DONOR_MAX_AGE = 65;
+
 export async function register(req: Request, res: Response) {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  // Validasi usia khusus PENDONOR (17–65 tahun, standar PMI).
+  // PASIEN tidak dibatasi usia (bayi/lansia tetap boleh request darah).
+  if (parsed.data.role === "PENDONOR") {
+    if (!parsed.data.birthDate) {
+      return res.status(400).json({ error: "Tanggal lahir wajib diisi untuk Pendonor." });
+    }
+    const age = calcAge(new Date(parsed.data.birthDate));
+    if (Number.isNaN(age) || age < DONOR_MIN_AGE || age > DONOR_MAX_AGE) {
+      return res.status(400).json({
+        error: `Maaf, usia pendonor harus ${DONOR_MIN_AGE}–${DONOR_MAX_AGE} tahun (usia Anda: ${age} tahun).`,
+      });
+    }
+  }
 
   const exists = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (exists) return res.status(409).json({ error: "Email sudah terdaftar" });

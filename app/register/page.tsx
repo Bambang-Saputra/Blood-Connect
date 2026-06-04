@@ -27,9 +27,37 @@ export default function RegisterPage() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  // Hitung umur (tahun penuh) dari string tanggal lahir.
+  function calcAge(dateStr: string): number {
+    const b = new Date(dateStr);
+    const now = new Date();
+    let age = now.getFullYear() - b.getFullYear();
+    const m = now.getMonth() - b.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+    return age;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    // Validasi usia client-side untuk Pendonor (17–65 tahun) — feedback instan.
+    if (form.role === "PENDONOR") {
+      if (!form.birthDate) {
+        setError("Tanggal lahir wajib diisi untuk Pendonor.");
+        return;
+      }
+      const age = calcAge(form.birthDate);
+      if (age < 17) {
+        setError(`Maaf, usia Anda ${age} tahun. Pendonor minimal 17 tahun. Anda bisa daftar sebagai Pasien.`);
+        return;
+      }
+      if (age > 65) {
+        setError(`Maaf, usia Anda ${age} tahun. Pendonor maksimal 65 tahun demi keselamatan.`);
+        return;
+      }
+    }
+
     setLoading(true);
 
     const res = await api("/auth/register", { method: "POST", body: JSON.stringify(form) });
