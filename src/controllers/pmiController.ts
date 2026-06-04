@@ -151,8 +151,8 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
     ? null
     : `${scheduleReason} — per pemeriksaan ${pmi.pmiName} (${examDateStr})`;
 
-  // Transaksi: create checkup + link ke schedule + refresh cache eligibility donor
-  const result = await prisma.$transaction(async (tx) => {
+  // Transaksi: create checkup + link ke schedule + refresh cache eligibility donor.
+  const doCheckupTxn = () => prisma.$transaction(async (tx) => {
     const checkup = await tx.pemeriksaanDonor.create({
       data: {
         donorId: schedule.donorId,
@@ -200,7 +200,34 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
     }
 
     return { checkup, schedule: updatedSchedule };
-  });
+  }, { maxWait: 10_000, timeout: 20_000 });
+
+  // Robustness terhadap koneksi Neon (serverless) yang sesekali lambat/putus di
+  // tengah transaksi interaktif (P2028) — terutama saat DB cold-start. Tanpa
+  // penanganan ini, satu blip koneksi meng-crash SELURUH server (kelas bug yang
+  // sama dengan Bug #1). Strategi: timeout transaksi dinaikkan (di atas) + retry
+  // dengan backoff kecil; bila tetap gagal balas 503 dan server tetap hidup.
+  const TRANSIENT_DB_ERRORS = new Set(["P2028", "P1001", "P1017"]);
+  const MAX_ATTEMPTS = 3;
+  let result: Awaited<ReturnType<typeof doCheckupTxn>> | undefined;
+  let lastDbErr: any;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      result = await doCheckupTxn();
+      lastDbErr = undefined;
+      break;
+    } catch (err: any) {
+      lastDbErr = err;
+      if (!TRANSIENT_DB_ERRORS.has(err?.code) || attempt === MAX_ATTEMPTS) break;
+      await new Promise((r) => setTimeout(r, 300 * attempt)); // backoff sebelum retry
+    }
+  }
+  if (!result) {
+    console.error("[checkup] transaksi pemeriksaan gagal:", lastDbErr);
+    return res.status(503).json({
+      error: "Koneksi database sedang tidak stabil. Mohon coba lagi sebentar.",
+    });
+  }
 
   await writeAudit({
     userId: req.user!.id,
