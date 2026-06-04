@@ -42,6 +42,7 @@ router.patch("/donor/me/preferred-pmi", requireAuth, requireRole("PENDONOR"), do
 router.post("/donor/check-eligible", requireAuth, requireRole("PENDONOR"), donor.checkEligibleHandler);
 router.post("/donor/schedules", requireAuth, requireRole("PENDONOR"), donor.createSchedule);
 router.get("/donor/schedules", requireAuth, requireRole("PENDONOR"), donor.listMySchedules);
+router.delete("/donor/schedules/:id", requireAuth, requireRole("PENDONOR"), donor.deleteSchedule);
 router.get("/donor/history", requireAuth, requireRole("PENDONOR"), donor.getDonorHistory);
 router.get("/donor/notifications", requireAuth, requireRole("PENDONOR"), donor.listMyNotifications);
 router.post("/donor/notifications/:id/respond", requireAuth, requireRole("PENDONOR"), donor.respondNotification);

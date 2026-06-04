@@ -101,6 +101,37 @@ export async function createSchedule(req: AuthedRequest, res: Response) {
   }
 }
 
+// =====================================================================
+// DELETE /api/donor/schedules/:id
+// Membatalkan (menghapus) jadwal yang sudah dibuat oleh donor.
+// =====================================================================
+export async function deleteSchedule(req: AuthedRequest, res: Response) {
+  // 1. Cari profil pendonor yang sedang login
+  const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
+  if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
+
+  // 2. Cari jadwal yang mau dihapus di database
+  const schedule = await prisma.jadwalDonor.findUnique({
+    where: { id: req.params.id }
+  });
+
+  // 3. Validasi keamanan
+  if (!schedule) return res.status(404).json({ error: "Jadwal tidak ditemukan" });
+  if (schedule.donorId !== donor.id) return res.status(403).json({ error: "Akses ditolak. Ini bukan jadwal Anda." });
+
+  // Cegah menghapus jadwal yang sudah terlanjur selesai atau ditolak
+  if (schedule.status === "COMPLETED" || schedule.status === "REJECTED") {
+    return res.status(400).json({ error: "Jadwal yang sudah selesai/ditolak tidak dapat dibatalkan" });
+  }
+
+  // 4. Hapus jadwal dari database
+  await prisma.jadwalDonor.delete({
+    where: { id: schedule.id }
+  });
+
+  return res.json({ message: "Jadwal berhasil dibatalkan." });
+}
+
 // GET /api/donor/schedules — list jadwal milik donor sendiri
 export async function listMySchedules(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });

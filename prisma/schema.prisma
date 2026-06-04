@@ -154,6 +154,9 @@ model Pendonor {
   isEligible        Boolean     @default(false)
   eligibilityReason String?
   totalDonations    Int         @default(0)
+  
+  // PENAMBAHAN: Kolom status cooldown (Masa Tunggu Medis)
+  cooldownUntil     DateTime?   // Null berarti bebas cooldown
 
   // Optional: PMI default pilihan donor (untuk future broadcast PMI→donor)
   preferredPmiId    String?
@@ -204,6 +207,9 @@ model ScreeningAnswer {
   donorId       String
   donor         Pendonor @relation(fields: [donorId], references: [id], onDelete: Cascade)
   answeredAt    DateTime @default(now())
+  
+  // PENAMBAHAN: Kolom penentu kapan form ini expired (kadaluarsa)
+  validUntil    DateTime? 
 
   hasFever              Boolean @default(false)
   recentSurgery         Boolean @default(false)
@@ -218,7 +224,6 @@ model ScreeningAnswer {
   passed        Boolean
 
   // Reverse relation: 1 screening bisa dipakai beberapa jadwal
-  // (donor daftar di multi PMI memakai screening yang sama).
   jadwals       JadwalDonor[]
 }
 

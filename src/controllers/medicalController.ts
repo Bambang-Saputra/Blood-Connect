@@ -141,18 +141,73 @@ export async function submitScreening(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({ where: { userId: req.user!.id } });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
+  // Cek apakah user saat ini masih dalam masa cooldown
+  if (donor.cooldownUntil && donor.cooldownUntil > new Date()) {
+    return res.status(403).json({ 
+      error: "Anda masih dalam masa tunggu (cooldown) medis dan tidak dapat mengisi skrining baru saat ini." 
+    });
+  }
+
   const a = parsed.data;
   const passed =
     !a.hasFever && !a.recentSurgery && !a.recentTattoo &&
     !a.isPregnantOrLactating && !a.hasHIVOrHepatitis &&
     !a.riskySexualBehavior && !a.recentVaccination && !a.onMedication;
 
+  // Menentukan Durasi Cooldown & Waktu Expired
+  let cooldownDays = 0;
+  let customMessage = "";
+  const now = new Date();
+  
+  if (!passed) {
+    if (a.hasHIVOrHepatitis || a.riskySexualBehavior) {
+      cooldownDays = 36500; // Permanen (100 tahun)
+      customMessage = "Mohon maaf, Anda tidak dapat mendonorkan darah secara permanen demi keselamatan resipien.";
+    } else if (a.isPregnantOrLactating) {
+      cooldownDays = 270; // Masa tunda kehamilan + menyusui standar
+      customMessage = "Anda ditangguhkan dari donor selama masa kehamilan & menyusui (sekitar 9 bulan ke depan).";
+    } else if (a.recentSurgery || a.recentTattoo) {
+      cooldownDays = 180; // 6 Bulan
+      customMessage = "Terdapat masa tunggu 6 bulan setelah operasi besar, tato, atau tindik.";
+    } else if (a.onMedication || a.recentVaccination) {
+      cooldownDays = 14; // 2 Minggu
+      customMessage = "Terdapat masa tunggu 14 hari setelah konsumsi obat rutin atau vaksinasi.";
+    } else if (a.hasFever) {
+      cooldownDays = 7; // 1 Minggu
+      customMessage = "Anda harus menunggu 7 hari setelah demam Anda sepenuhnya sembuh.";
+    }
+
+    // Set cooldown ke tabel pendonor
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + cooldownDays);
+    
+    await prisma.pendonor.update({
+      where: { id: donor.id },
+      data: { cooldownUntil: targetDate, isEligible: false, eligibilityReason: customMessage }
+    });
+
+  } else {
+    customMessage = "Skrining lolos — silakan lanjut pilih jadwal di PMI (Form ini berlaku selama 7 Hari)";
+    
+    // Jika Lolos, form ini expired dalam 7 hari
+    cooldownDays = 7;
+  }
+
+  // Hitung Valid Until untuk form skrining ini
+  const validUntilDate = new Date(now);
+  validUntilDate.setDate(validUntilDate.getDate() + cooldownDays);
+
   const screening = await prisma.screeningAnswer.create({
-    data: { donorId: donor.id, ...a, passed },
+    data: { 
+      donorId: donor.id, 
+      ...a, 
+      passed,
+      validUntil: validUntilDate 
+    },
   });
 
   return res.status(201).json({
-    message: passed ? "Skrining lolos — silakan lanjut ke pemeriksaan fisik di PMI" : "Belum lolos skrining, lihat alasan",
+    message: customMessage,
     screening,
   });
 }
