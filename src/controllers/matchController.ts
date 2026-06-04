@@ -4,6 +4,7 @@ import { Prisma, RequestStatus, StockStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AuthedRequest } from "../middleware/auth";
 import { writeAudit } from "../lib/audit";
+import { notifyRequestStatus } from "../lib/notify";
 
 /**
  * =====================================================================
@@ -205,7 +206,10 @@ export async function acceptRequest(req: AuthedRequest, res: Response) {
   if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa accept request" });
   if (pmi.status !== "VERIFIED") return res.status(403).json({ error: "PMI belum diverifikasi" });
 
-  const existing = await prisma.permintaanDonor.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.permintaanDonor.findUnique({
+    where: { id: req.params.id },
+    include: { patient: { select: { userId: true } } },
+  });
   if (!existing) return res.status(404).json({ error: "Request tidak ditemukan" });
   if (existing.acceptedByPmiId) {
     return res.status(409).json({ error: "Request sudah di-claim PMI lain" });
@@ -227,6 +231,14 @@ export async function acceptRequest(req: AuthedRequest, res: Response) {
     before: { acceptedByPmiId: null, status: "PENDING" },
     after: { acceptedByPmiId: pmi.id, status: "PROCESSING" },
     ipAddress: req.ip,
+  });
+
+  // P1: beri tahu pasien bahwa permintaannya telah diterima & diproses PMI.
+  await notifyRequestStatus({
+    patientUserId: existing.patient?.userId,
+    requestId: updated.id,
+    newStatus: "PROCESSING",
+    pmiName: pmi.pmiName,
   });
 
   return res.json({ message: "Request diterima — siap diproses", request: updated });
@@ -254,7 +266,7 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
 
   const before = await prisma.permintaanDonor.findUnique({
     where: { id: req.params.id },
-    include: { acceptedByPmi: true },
+    include: { acceptedByPmi: true, patient: { select: { userId: true } } },
   });
   if (!before) return res.status(404).json({ error: "Request tidak ditemukan" });
 
@@ -353,6 +365,14 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
         ipAddress: req.ip,
       });
 
+      // P1: beri tahu pasien permintaannya telah dipenuhi.
+      await notifyRequestStatus({
+        patientUserId: before.patient?.userId,
+        requestId: result.updated.id,
+        newStatus: "FULFILLED",
+        pmiName: before.acceptedByPmi?.pmiName,
+      });
+
       return res.json({
         message: `Request fulfilled. Stok dari ${result.allocations.length} batch dipotong.`,
         request: result.updated,
@@ -379,6 +399,14 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
     before: { status: before.reqStatus },
     after: { status: updated.reqStatus, note: parsed.data.note },
     ipAddress: req.ip,
+  });
+
+  // P1: beri tahu pasien tentang perubahan status (REJECTED, IN_TRANSIT, dll).
+  await notifyRequestStatus({
+    patientUserId: before.patient?.userId,
+    requestId: updated.id,
+    newStatus: parsed.data.newStatus,
+    pmiName: before.acceptedByPmi?.pmiName,
   });
 
   return res.json({ message: "Status diperbarui", request: updated });
