@@ -62,6 +62,19 @@ export async function createSchedule(req: AuthedRequest, res: Response) {
       error: "Anda perlu mengisi kuesioner skrining dulu sebelum daftar jadwal donor.",
     });
   }
+  // Skrining terakhir harus LOLOS (kalau gagal, donor dalam cooldown medis)
+  if (!latestScreening.passed) {
+    return res.status(400).json({
+      error: "Skrining terakhir Anda tidak lolos. Anda tidak dapat mendaftar jadwal donor saat ini.",
+    });
+  }
+  // Skrining tidak boleh kadaluarsa (validUntil berlaku 7 hari sejak diisi).
+  // Skrining lama tanpa validUntil (data legacy) dilewati cek ini.
+  if (latestScreening.validUntil && latestScreening.validUntil < new Date()) {
+    return res.status(400).json({
+      error: "Kuesioner skrining Anda sudah kadaluarsa (berlaku 7 hari). Mohon isi skrining ulang.",
+    });
+  }
 
   // Defense-in-depth: tangkap Prisma error supaya server tidak crash
   // kalau ada unexpected constraint violation (mis. race condition,
