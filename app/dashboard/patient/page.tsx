@@ -74,17 +74,6 @@ export default function PatientDashboard() {
     }
   }
 
-  async function cancelRequest(id: string) {
-    if (!window.confirm("Batalkan permintaan darah ini? Tindakan ini tidak dapat diurungkan.")) return;
-    const res = await api(`/requests/${id}/cancel`, { method: "PATCH" });
-    if (res.ok) {
-      toast.success("Permintaan dibatalkan");
-      refresh();
-    } else {
-      toast.error((await res.json()).error ?? "Gagal membatalkan permintaan");
-    }
-  }
-
   const activeCount = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus)).length;
   const fulfilledCount = requests.filter((r) => r.reqStatus === "FULFILLED").length;
 
@@ -238,15 +227,6 @@ export default function PatientDashboard() {
                   <div className="flex items-center gap-2">
                     <UrgencyBadge urgency={r.urgency} />
                     <Badge status={r.reqStatus} />
-                    {["PENDING", "PROCESSING"].includes(r.reqStatus) && (
-                      <button
-                        onClick={() => cancelRequest(r.id)}
-                        className="text-[11px] font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded-lg transition whitespace-nowrap"
-                        title="Batalkan permintaan ini"
-                      >
-                        Batalkan
-                      </button>
-                    )}
                   </div>
                 </div>
 

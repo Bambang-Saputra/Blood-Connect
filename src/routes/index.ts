@@ -35,7 +35,6 @@ router.post("/requests", requireAuth, requireRole("PASIEN"), match.createRequest
 router.get("/requests/:id", requireAuth, match.getRequest);
 router.post("/requests/:id/accept", requireAuth, requireRole("PMI"), match.acceptRequest);
 router.patch("/requests/:id/status", requireAuth, requireRole("PMI", "ADMIN"), match.updateRequestStatus);
-router.patch("/requests/:id/cancel", requireAuth, requireRole("PASIEN"), match.cancelRequest);   // Pasien batalkan miliknya
 
 // ---------------------- PENDONOR -------------------------------------
 router.get("/donor/me", requireAuth, requireRole("PENDONOR"), donor.getMe);
