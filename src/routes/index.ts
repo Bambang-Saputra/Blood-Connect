@@ -12,8 +12,8 @@ import { requireAuth, requireRole } from "../middleware/auth";
 const router = Router();
 
 // ---------------------- AUTH -----------------------------------------
-router.post("/auth/register", auth.register);              // Pendonor / Pasien only
-router.post("/auth/register-pmi", auth.registerPmi);       // PMI registration (terpisah)
+router.post("/auth/register", auth.register); // Pendonor / Pasien only
+router.post("/auth/register-pmi", auth.registerPmi); // PMI registration (terpisah)
 router.post("/auth/login", auth.login);
 router.post("/auth/logout", requireAuth, auth.logout);
 router.get("/auth/me", requireAuth, auth.getMe);
@@ -31,7 +31,7 @@ router.patch("/notifications/:id/read", requireAuth, notif.markRead);
 // Auto-match dihapus — request stays PENDING sampai PMI accept eksplisit,
 // dan stok hanya dipotong saat PMI klik Fulfill.
 router.get("/requests", requireAuth, match.listMyRequests);
-router.post("/requests", requireAuth, requireRole("PASIEN"), match.createRequest);   // Pasien only
+router.post("/requests", requireAuth, requireRole("PASIEN"), match.createRequest); // Pasien only
 router.get("/requests/:id", requireAuth, match.getRequest);
 router.post("/requests/:id/accept", requireAuth, requireRole("PMI"), match.acceptRequest);
 router.patch("/requests/:id/status", requireAuth, requireRole("PMI", "ADMIN"), match.updateRequestStatus);
@@ -52,9 +52,10 @@ router.get("/donor/broadcasts", requireAuth, requireRole("PENDONOR"), donor.list
 
 // ---------------------- PMI DASHBOARD --------------------------------
 router.get("/pmi/me", requireAuth, requireRole("PMI"), pmi.getMyPmi);
-router.get("/pmi/list", requireAuth, pmi.listPublicPmis);                                  // public list — semua role bisa lihat
+router.get("/pmi/list", requireAuth, pmi.listPublicPmis); // public list — semua role bisa lihat
 router.get("/pmi/schedules", requireAuth, requireRole("PMI"), pmi.listMySchedules);
 router.post("/pmi/schedules/:id/checkup", requireAuth, requireRole("PMI"), pmi.inputScheduleCheckup);
+router.post("/pmi/schedules/:id/complete", requireAuth, requireRole("PMI"), pmi.completeDonation);
 router.patch("/pmi/schedules/:id/status", requireAuth, requireRole("PMI"), pmi.updateScheduleStatus);
 // Broadcast minta stok ke donor terdekat (kota sama)
 router.post("/pmi/broadcasts", requireAuth, requireRole("PMI"), pmi.createBroadcast);
