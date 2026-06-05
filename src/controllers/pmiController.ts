@@ -123,11 +123,16 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
   // Aturan lolos cek fisik
   const d = parsed.data;
   const checkupPassed =
-    d.hemoglobinLevel >= 12.5 && d.hemoglobinLevel <= 17.0 &&
-    d.systolicBP >= 100 && d.systolicBP <= 160 &&
-    d.diastolicBP >= 60 && d.diastolicBP <= 100 &&
-    d.bodyTempC >= 36.5 && d.bodyTempC <= 37.5 &&
-    d.pulseRate >= 50 && d.pulseRate <= 100 &&
+    d.hemoglobinLevel >= 12.5 &&
+    d.hemoglobinLevel <= 17.0 &&
+    d.systolicBP >= 100 &&
+    d.systolicBP <= 160 &&
+    d.diastolicBP >= 60 &&
+    d.diastolicBP <= 100 &&
+    d.bodyTempC >= 36.5 &&
+    d.bodyTempC <= 37.5 &&
+    d.pulseRate >= 50 &&
+    d.pulseRate <= 100 &&
     d.weight >= 45;
 
   // Compute eligibility: checkup AND screening sama-sama lolos
@@ -145,62 +150,68 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
   const scheduleReason = reasons.length ? reasons.join("; ") : null;
 
   const examDateStr = new Date().toLocaleDateString("id-ID", {
-    day: "numeric", month: "short", year: "numeric",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
-  const globalReason = isEligible
-    ? null
-    : `${scheduleReason} — per pemeriksaan ${pmi.pmiName} (${examDateStr})`;
+  const globalReason = isEligible ? null : `${scheduleReason} — per pemeriksaan ${pmi.pmiName} (${examDateStr})`;
 
   // Transaksi: create checkup + link ke schedule + refresh cache eligibility donor
-  const result = await prisma.$transaction(async (tx) => {
-    const checkup = await tx.pemeriksaanDonor.create({
-      data: {
-        donorId: schedule.donorId,
-        pmiId: pmi.id,
-        examinedBy: req.user!.id,
-        hemoglobinLevel: d.hemoglobinLevel,
-        systolicBP: d.systolicBP,
-        diastolicBP: d.diastolicBP,
-        bodyTempC: d.bodyTempC,
-        pulseRate: d.pulseRate,
-        weight: d.weight,
-        notes: d.notes,
-        passed: checkupPassed,
-      },
-    });
-
-    // (1) schedule.isEligible = AUTHORITATIVE per-event. Selalu di-set untuk
-    //     jadwal yang sedang diperiksa — ini "kebenaran" untuk donasi ini.
-    const updatedSchedule = await tx.jadwalDonor.update({
-      where: { id: schedule.id },
-      data: {
-        checkupId: checkup.id,
-        isEligible,
-        eligibilityReason: scheduleReason,
-      },
-      include: { checkup: true, screening: true, donor: { include: { user: true } } },
-    });
-
-    // (2) pendonor.isEligible = CACHE dari checkup TERBARU donor (by examinedAt).
-    //     Guard: hanya refresh kalau checkup ini memang yang paling baru. Tujuan:
-    //       - global flag selalu mencerminkan kondisi medis termutakhir,
-    //       - tidak "flip-flop" hanya karena urutan eksekusi input antar-PMI
-    //         (checkup lama yang di-input belakangan TIDAK menimpa yang baru).
-    //     schedule.isEligible (poin 1) tetap jadi sumber kebenaran per-jadwal.
-    const latestCheckup = await tx.pemeriksaanDonor.findFirst({
-      where: { donorId: schedule.donorId },
-      orderBy: { examinedAt: "desc" },
-      select: { id: true },
-    });
-    if (latestCheckup?.id === checkup.id) {
-      await tx.pendonor.update({
-        where: { id: schedule.donorId },
-        data: { weight: d.weight, isEligible, eligibilityReason: globalReason },
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const checkup = await tx.pemeriksaanDonor.create({
+        data: {
+          donorId: schedule.donorId,
+          pmiId: pmi.id,
+          examinedBy: req.user!.id,
+          hemoglobinLevel: d.hemoglobinLevel,
+          systolicBP: d.systolicBP,
+          diastolicBP: d.diastolicBP,
+          bodyTempC: d.bodyTempC,
+          pulseRate: d.pulseRate,
+          weight: d.weight,
+          notes: d.notes,
+          passed: checkupPassed,
+        },
       });
-    }
 
-    return { checkup, schedule: updatedSchedule };
-  });
+      // (1) schedule.isEligible = AUTHORITATIVE per-event. Selalu di-set untuk
+      //     jadwal yang sedang diperiksa — ini "kebenaran" untuk donasi ini.
+      const updatedSchedule = await tx.jadwalDonor.update({
+        where: { id: schedule.id },
+        data: {
+          checkupId: checkup.id,
+          isEligible,
+          eligibilityReason: scheduleReason,
+        },
+        include: { checkup: true, screening: true, donor: { include: { user: true } } },
+      });
+
+      // (2) pendonor.isEligible = CACHE dari checkup TERBARU donor (by examinedAt).
+      //     Guard: hanya refresh kalau checkup ini memang yang paling baru. Tujuan:
+      //       - global flag selalu mencerminkan kondisi medis termutakhir,
+      //       - tidak "flip-flop" hanya karena urutan eksekusi input antar-PMI
+      //         (checkup lama yang di-input belakangan TIDAK menimpa yang baru).
+      //     schedule.isEligible (poin 1) tetap jadi sumber kebenaran per-jadwal.
+      const latestCheckup = await tx.pemeriksaanDonor.findFirst({
+        where: { donorId: schedule.donorId },
+        orderBy: { examinedAt: "desc" },
+        select: { id: true },
+      });
+      if (latestCheckup?.id === checkup.id) {
+        await tx.pendonor.update({
+          where: { id: schedule.donorId },
+          data: { weight: d.weight, isEligible, eligibilityReason: globalReason },
+        });
+      }
+
+      return { checkup, schedule: updatedSchedule };
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    },
+  );
 
   await writeAudit({
     userId: req.user!.id,
@@ -212,11 +223,144 @@ export async function inputScheduleCheckup(req: AuthedRequest, res: Response) {
   });
 
   return res.status(201).json({
-    message: isEligible
-      ? "Pemeriksaan tersimpan — donor LAYAK donor"
-      : "Pemeriksaan tersimpan — donor BELUM LAYAK donor",
+    message: isEligible ? "Pemeriksaan tersimpan — donor LAYAK donor" : "Pemeriksaan tersimpan — donor BELUM LAYAK donor",
     isEligible,
     eligibilityReason: result.schedule.eligibilityReason,
+    schedule: result.schedule,
+  });
+}
+
+// =====================================================================
+// POST /api/pmi/schedules/:id/complete
+// PMI menyelesaikan donasi: catat DonorHistory + update Pendonor (cooldown)
+// + tambah StokDarah hasil donasi + set jadwal COMPLETED.
+// =====================================================================
+const completeSchema = z.object({
+  bagCount: z.number().int().min(1).max(10), // jumlah kantong
+  component: z.enum(["WHOLE_BLOOD", "PRC", "FFP", "TC", "CRYO"]).default("WHOLE_BLOOD"),
+  volumeMl: z.number().int().min(100).max(1000).default(450),
+  note: z.string().max(500).optional(),
+});
+
+// Shelf-life per komponen (hari) — perkiraan, sesuaikan kalau perlu.
+const SHELF_LIFE_DAYS: Record<string, number> = {
+  WHOLE_BLOOD: 35,
+  PRC: 42,
+  FFP: 365,
+  TC: 5,
+  CRYO: 365,
+};
+
+export async function completeDonation(req: AuthedRequest, res: Response) {
+  const parsed = completeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const c = parsed.data;
+
+  const pmi = await prisma.pMI.findUnique({ where: { userId: req.user!.id } });
+  if (!pmi) return res.status(403).json({ error: "Hanya PMI yang bisa akses" });
+
+  const schedule = await prisma.jadwalDonor.findUnique({
+    where: { id: req.params.id },
+    include: { donor: { include: { user: { select: { name: true } } } } },
+  });
+  if (!schedule) return res.status(404).json({ error: "Jadwal tidak ditemukan" });
+  if (schedule.pmiId !== pmi.id) return res.status(403).json({ error: "Jadwal ini bukan di PMI Anda" });
+  if (schedule.status === "COMPLETED") return res.status(400).json({ error: "Donasi untuk jadwal ini sudah diselesaikan" });
+  if (schedule.status !== "CONFIRMED") return res.status(400).json({ error: "Hanya jadwal CONFIRMED yang bisa diselesaikan" });
+  if (schedule.isEligible !== true) return res.status(400).json({ error: "Donor belum dinyatakan layak — tidak bisa ambil darah" });
+
+  const donor = schedule.donor;
+  const now = new Date();
+  const expiry = new Date(now.getTime() + (SHELF_LIFE_DAYS[c.component] ?? 35) * 86400000);
+  const cooldownUntil = new Date(now.getTime() + 60 * 86400000); // 60 hari
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // 1. Riwayat donasi (muncul di dashboard donor)
+      const history = await tx.donorHistory.create({
+        data: {
+          donorId: donor.id,
+          donationDate: now,
+          location: pmi.pmiName,
+          volumeMl: c.volumeMl,
+          component: c.component,
+          note: c.note,
+        },
+      });
+
+      // 2. Update profil donor: cooldown + statistik
+      await tx.pendonor.update({
+        where: { id: donor.id },
+        data: { lastDonationDate: now, totalDonations: { increment: 1 }, cooldownUntil },
+      });
+
+      // 3. Darah donor → stok PMI (AVAILABLE). Inilah yang ngisi ulang stok.
+      const stock = await tx.stokDarah.create({
+        data: {
+          pmiId: pmi.id,
+          bloodType: donor.bloodType,
+          rhesusType: donor.rhesusType,
+          component: c.component,
+          quantity: c.bagCount,
+          expiryDate: expiry,
+          location: pmi.pmiName,
+          status: "AVAILABLE",
+          source: `Donasi: ${donor.user.name}`,
+          donorId: donor.id,
+        },
+      });
+
+      // 4. Tandai jadwal selesai
+      const updatedSchedule = await tx.jadwalDonor.update({
+        where: { id: schedule.id },
+        data: { status: "COMPLETED" },
+      });
+
+      // 5. (OPSIONAL — heuristik) Kalau ada broadcast OPEN di PMI ini untuk
+      //    golongan yang sama, anggap donasi ini ngisi sebagian. Skema TIDAK
+      //    nyimpen link schedule→broadcast, jadi ini cuma cocokin PMI+golongan.
+      //    Hapus blok ini kalau lu nggak mau auto-attribute.
+      const openBroadcast = await tx.pmiBroadcast.findFirst({
+        where: { pmiId: pmi.id, status: "OPEN", bloodType: donor.bloodType, rhesusType: donor.rhesusType },
+        orderBy: { createdAt: "asc" },
+      });
+      if (openBroadcast) {
+        const newFilled = openBroadcast.filledQuantity + c.bagCount;
+        await tx.pmiBroadcast.update({
+          where: { id: openBroadcast.id },
+          data: { filledQuantity: newFilled, status: newFilled >= openBroadcast.targetQuantity ? "CLOSED" : "OPEN" },
+        });
+      }
+
+      return { history, stock, schedule: updatedSchedule };
+    },
+    { maxWait: 10000, timeout: 20000 },
+  );
+
+  // Notif & audit DI LUAR transaksi (jangan I/O lambat di dalam tx — pelajaran tadi)
+  await notifyUser({
+    userId: donor.userId,
+    type: NotificationType.SCHEDULE_UPDATE,
+    title: "Donasi selesai — terima kasih! 🩸",
+    body: `Donasi Anda di ${pmi.pmiName} (${c.bagCount} kantong) tercatat. Cek Riwayat Donor di dashboard Anda.`,
+    meta: { scheduleId: schedule.id, historyId: result.history.id },
+  }).catch((err) => console.error("[completeDonation] notif error:", err));
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "STATUS_CHANGE",
+    entity: "JadwalDonor",
+    entityId: schedule.id,
+    before: { status: "CONFIRMED" },
+    after: { status: "COMPLETED", donorHistoryId: result.history.id, stockId: result.stock.id },
+    ipAddress: req.ip,
+  });
+
+  const rh = donor.rhesusType === "POSITIVE" ? "+" : "-";
+  return res.status(201).json({
+    message: `Donasi selesai. ${c.bagCount} kantong ${donor.bloodType}${rh} ditambahkan ke stok.`,
+    history: result.history,
+    stock: result.stock,
     schedule: result.schedule,
   });
 }
@@ -305,10 +449,7 @@ export async function createBroadcast(req: AuthedRequest, res: Response) {
   // Target donors: SEMUA donor type yang bisa donate ke recipient yang diminta.
   // Pakai bloodCompat matrix biar coverage donor maksimal (bukan cuma exact + O-).
   // Contoh: PMI minta A+ → notify donor A+, A-, O+, O- di kota tersebut.
-  const compatibleDonorTypes = donorTypesForRecipient(
-    parsed.data.bloodType,
-    parsed.data.rhesusType,
-  );
+  const compatibleDonorTypes = donorTypesForRecipient(parsed.data.bloodType, parsed.data.rhesusType);
 
   const candidates = await prisma.pendonor.findMany({
     where: {
@@ -329,12 +470,10 @@ export async function createBroadcast(req: AuthedRequest, res: Response) {
         email: c.user.email,
         type: NotificationType.PMI_BROADCAST,
         title: `🩸 ${pmi.pmiName} butuh donor ${golonganLabel}`,
-        body:
-          parsed.data.message ??
-          `PMI di kota Anda butuh ${parsed.data.targetQuantity} kantong darah ${golonganLabel}. Anda kompatibel — silakan daftar jadwal donor.`,
+        body: parsed.data.message ?? `PMI di kota Anda butuh ${parsed.data.targetQuantity} kantong darah ${golonganLabel}. Anda kompatibel — silakan daftar jadwal donor.`,
         meta: { broadcastId: broadcast.id, pmiId: pmi.id, bloodType: golonganLabel },
-      })
-    )
+      }),
+    ),
   ).catch((err) => console.error("[broadcast] notif batch error:", err));
 
   await writeAudit({
@@ -385,4 +524,3 @@ export async function closeBroadcast(req: AuthedRequest, res: Response) {
   });
   return res.json({ message: "Broadcast ditutup", broadcast: updated });
 }
-
