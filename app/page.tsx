@@ -205,7 +205,6 @@ function Roles() {
     { icon: "💉", title: "Pendonor", desc: "Lacak riwayat donasi, dapatkan reminder jadwal, dan responi permintaan darurat di sekitar Anda.", color: "bg-red-50 border-red-200" },
     { icon: "🩺", title: "Pasien", desc: "Ajukan permintaan darah dalam hitungan detik. MatchSystem otomatis cari stok terdekat untuk Anda.", color: "bg-pink-50 border-pink-200" },
     { icon: "🏛️", title: "PMI / UTD", desc: "Kelola stok darah, terima jadwal donor, dan akui permintaan pasien lewat jaringan nasional.", color: "bg-orange-50 border-orange-200" },
-    { icon: "🛡️", title: "Admin", desc: "Awasi distribusi nasional, verifikasi PMI, dan kelola integritas data dengan audit log lengkap.", color: "bg-slate-50 border-slate-200" },
   ];
 
   return (
@@ -213,13 +212,13 @@ function Roles() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-12">
           <span className="text-red-600 text-sm font-semibold uppercase tracking-wide">Untuk Siapa</span>
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">Satu Platform, Empat Peran</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">Satu Platform, Tiga Peran</h2>
           <p className="text-slate-600 mt-3 max-w-xl mx-auto">
-            Blood Connect dirancang untuk seluruh ekosistem donor darah — dari pendonor sukarela sampai admin nasional.
+            Blood Connect dirancang untuk seluruh ekosistem donor darah — dari pendonor sukarela, pasien, hingga PMI/UTD.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {roles.map((r) => (
             <div key={r.title} className={`${r.color} border-2 rounded-2xl p-6 hover:scale-105 transition cursor-default`}>
               <div className="text-5xl mb-4">{r.icon}</div>
@@ -317,10 +316,10 @@ function CallToAction() {
           Bergabunglah dengan ribuan pendonor di seluruh Indonesia. Daftar dalam 2 menit, donasi pertama kapan saja.
         </p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
-          <Link href="/register" className="bg-white text-red-700 hover:bg-red-50 px-8 py-4 rounded-lg font-bold shadow-2xl hover:shadow-white/30 transition">
+          <Link href="/register?role=PENDONOR" className="bg-white text-red-700 hover:bg-red-50 px-8 py-4 rounded-lg font-bold shadow-2xl hover:shadow-white/30 transition">
             Daftar Sebagai Pendonor
           </Link>
-          <Link href="/register" className="bg-red-800 hover:bg-red-900 text-white border-2 border-red-500 px-8 py-4 rounded-lg font-bold transition">
+          <Link href="/register?role=PASIEN" className="bg-red-800 hover:bg-red-900 text-white border-2 border-red-500 px-8 py-4 rounded-lg font-bold transition">
             Saya Butuh Darah
           </Link>
         </div>
@@ -360,7 +359,6 @@ function Footer() {
             <ul className="space-y-2 text-sm">
               <li><a href="#" className="hover:text-red-400">FAQ</a></li>
               <li><a href="#" className="hover:text-red-400">Kontak Support</a></li>
-              <li><a href="https://github.com/Bambang-Saputra/Blood-Connect" className="hover:text-red-400">GitHub</a></li>
             </ul>
           </div>
         </div>
