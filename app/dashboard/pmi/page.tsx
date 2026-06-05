@@ -313,6 +313,10 @@ export default function PmiDashboard() {
                           onClick={() => acceptRequest(r.id)}>Accept</Button>
                       ) : r.acceptedByPmi && !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus) ? (
                         <div className="flex gap-1">
+                          {r.reqStatus === "PROCESSING" && (
+                            <Button size="sm"
+                              onClick={() => updateRequestStatus(r.id, "IN_TRANSIT")}>🚑 Kirim</Button>
+                          )}
                           <Button size="sm" variant="success" icon={<Icons.Check />}
                             onClick={() => updateRequestStatus(r.id, "FULFILLED")}>Fulfill</Button>
                           <Button size="sm" variant="secondary" icon={<Icons.X />}

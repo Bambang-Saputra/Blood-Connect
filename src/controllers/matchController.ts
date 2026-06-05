@@ -248,10 +248,10 @@ export async function acceptRequest(req: AuthedRequest, res: Response) {
 // 5) PATCH /api/requests/:id/status — PMI yang accept atau Admin update status
 // =====================================================================
 const updateStatusSchema = z.object({
+  // Status legacy MATCHED_STOCK/MATCHED_DONOR (peninggalan matchSystemService lama)
+  // sengaja TIDAK diterima sebagai input — alur nyata: PROCESSING → (IN_TRANSIT) → FULFILLED.
   newStatus: z.enum([
     "PROCESSING",
-    "MATCHED_STOCK",
-    "MATCHED_DONOR",
     "IN_TRANSIT",
     "FULFILLED",
     "REJECTED",
@@ -259,6 +259,21 @@ const updateStatusSchema = z.object({
   ]),
   note: z.string().max(500).optional(),
 });
+
+// Matriks transisi status yang sah. Mencegah loncatan ngawur (mis. PENDING→FULFILLED)
+// dan perubahan dari status terminal. IN_TRANSIT OPSIONAL: PMI boleh PROCESSING→FULFILLED
+// langsung (onsite) ATAU lewat IN_TRANSIT (darah dikirim ke RS).
+const VALID_TRANSITIONS: Record<string, Set<string>> = {
+  PENDING:       new Set(["REJECTED", "CANCELLED"]),
+  PROCESSING:    new Set(["IN_TRANSIT", "FULFILLED", "REJECTED", "CANCELLED"]),
+  IN_TRANSIT:    new Set(["FULFILLED", "REJECTED", "CANCELLED"]),
+  FULFILLED:     new Set(),
+  REJECTED:      new Set(),
+  CANCELLED:     new Set(),
+  // legacy — jaga-jaga bila ada baris data lama
+  MATCHED_STOCK: new Set(["IN_TRANSIT", "FULFILLED", "REJECTED", "CANCELLED"]),
+  MATCHED_DONOR: new Set(["IN_TRANSIT", "FULFILLED", "REJECTED", "CANCELLED"]),
+};
 
 export async function updateRequestStatus(req: AuthedRequest, res: Response) {
   const parsed = updateStatusSchema.safeParse(req.body);
@@ -276,6 +291,15 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
     if (!pmi || before.acceptedByPmiId !== pmi.id) {
       return res.status(403).json({ error: "Hanya PMI yang accept request ini boleh update statusnya" });
     }
+  }
+
+  // Validasi transisi status (state machine) — IN_TRANSIT opsional, status terminal
+  // (FULFILLED/REJECTED/CANCELLED) tidak bisa diubah lagi.
+  const allowedNext = VALID_TRANSITIONS[before.reqStatus] ?? new Set<string>();
+  if (!allowedNext.has(parsed.data.newStatus)) {
+    return res.status(400).json({
+      error: `Transisi status tidak valid: ${before.reqStatus} → ${parsed.data.newStatus}.`,
+    });
   }
 
   // FULFILLED → allocate stok dari PMI yang accept request. Atomic transaction
