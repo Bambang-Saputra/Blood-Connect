@@ -23,7 +23,10 @@ CREATE TYPE "ScheduleStatus" AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED', 'RESCH
 CREATE TYPE "PmiStatus" AS ENUM ('UNVERIFIED', 'VERIFIED', 'SUSPENDED');
 
 -- CreateEnum
-CREATE TYPE "NotificationType" AS ENUM ('ELIGIBLE_DONOR_REQUEST', 'REQUEST_STATUS_UPDATE', 'SCHEDULE_UPDATE', 'STOCK_ALERT', 'ACCOUNT_VERIFICATION', 'GENERIC');
+CREATE TYPE "NotificationType" AS ENUM ('ELIGIBLE_DONOR_REQUEST', 'REQUEST_STATUS_UPDATE', 'SCHEDULE_UPDATE', 'STOCK_ALERT', 'ACCOUNT_VERIFICATION', 'PMI_BROADCAST', 'GENERIC');
+
+-- CreateEnum
+CREATE TYPE "BroadcastStatus" AS ENUM ('OPEN', 'CLOSED', 'EXPIRED');
 
 -- CreateEnum
 CREATE TYPE "AuditAction" AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'STOCK_ALLOCATE');
@@ -60,6 +63,7 @@ CREATE TABLE "Pendonor" (
     "isEligible" BOOLEAN NOT NULL DEFAULT false,
     "eligibilityReason" TEXT,
     "totalDonations" INTEGER NOT NULL DEFAULT 0,
+    "cooldownUntil" TIMESTAMP(3),
     "preferredPmiId" TEXT,
 
     CONSTRAINT "Pendonor_pkey" PRIMARY KEY ("id")
@@ -89,6 +93,7 @@ CREATE TABLE "ScreeningAnswer" (
     "id" TEXT NOT NULL,
     "donorId" TEXT NOT NULL,
     "answeredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "validUntil" TIMESTAMP(3),
     "hasFever" BOOLEAN NOT NULL DEFAULT false,
     "recentSurgery" BOOLEAN NOT NULL DEFAULT false,
     "recentTattoo" BOOLEAN NOT NULL DEFAULT false,
@@ -137,13 +142,30 @@ CREATE TABLE "StokDarah" (
     "quantity" INTEGER NOT NULL,
     "expiryDate" TIMESTAMP(3) NOT NULL,
     "location" TEXT NOT NULL,
-    "status" "StockStatus" NOT NULL DEFAULT 'QUARANTINE',
+    "status" "StockStatus" NOT NULL DEFAULT 'AVAILABLE',
     "source" TEXT,
     "donorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "StokDarah_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PmiBroadcast" (
+    "id" TEXT NOT NULL,
+    "pmiId" TEXT NOT NULL,
+    "bloodType" "BloodType" NOT NULL,
+    "rhesusType" "RhesusType" NOT NULL,
+    "targetQuantity" INTEGER NOT NULL,
+    "filledQuantity" INTEGER NOT NULL DEFAULT 0,
+    "message" TEXT,
+    "status" "BroadcastStatus" NOT NULL DEFAULT 'OPEN',
+    "expiresAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PmiBroadcast_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -305,6 +327,12 @@ CREATE INDEX "StokDarah_location_idx" ON "StokDarah"("location");
 CREATE INDEX "StokDarah_pmiId_idx" ON "StokDarah"("pmiId");
 
 -- CreateIndex
+CREATE INDEX "PmiBroadcast_pmiId_status_createdAt_idx" ON "PmiBroadcast"("pmiId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "PmiBroadcast_bloodType_rhesusType_status_idx" ON "PmiBroadcast"("bloodType", "rhesusType", "status");
+
+-- CreateIndex
 CREATE INDEX "PermintaanDonor_reqStatus_createdAt_idx" ON "PermintaanDonor"("reqStatus", "createdAt");
 
 -- CreateIndex
@@ -315,9 +343,6 @@ CREATE INDEX "PermintaanDonor_acceptedByPmiId_idx" ON "PermintaanDonor"("accepte
 
 -- CreateIndex
 CREATE UNIQUE INDEX "StockAllocation_requestId_stockId_key" ON "StockAllocation"("requestId", "stockId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "JadwalDonor_screeningId_key" ON "JadwalDonor"("screeningId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "JadwalDonor_checkupId_key" ON "JadwalDonor"("checkupId");
@@ -372,6 +397,9 @@ ALTER TABLE "PMI" ADD CONSTRAINT "PMI_userId_fkey" FOREIGN KEY ("userId") REFERE
 
 -- AddForeignKey
 ALTER TABLE "StokDarah" ADD CONSTRAINT "StokDarah_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "PMI"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PmiBroadcast" ADD CONSTRAINT "PmiBroadcast_pmiId_fkey" FOREIGN KEY ("pmiId") REFERENCES "PMI"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "PermintaanDonor" ADD CONSTRAINT "PermintaanDonor_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Pasien"("id") ON DELETE SET NULL ON UPDATE CASCADE;
