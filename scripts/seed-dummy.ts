@@ -56,6 +56,9 @@ const LAST = ["Santoso", "Wijaya", "Pratama", "Hidayat", "Saputra", "Nugroho", "
   "Permana", "Maulana", "Anggraini", "Setiawan", "Hartono", "Gunawan", "Suryadi", "Firmansyah",
   "Rahmawati", "Cahyono", "Utami", "Wibowo", "Susanto", "Handoko", "Pertiwi", "Yulianto"];
 const fullName = () => `${rand(FIRST)} ${rand(LAST)}`;
+// Gender konsisten dengan nama depan (mis. Budi→MALE, Siti→FEMALE) agar skrining sesuai.
+const FEMALE_FIRST = new Set(["Siti","Dewi","Rina","Maya","Putri","Wati","Lestari","Indah","Sri","Ayu","Nadia","Citra","Fitri","Lina","Tari","Mega","Sara","Wulan","Nita","Vina","Ani"]);
+const genderOf = (name: string): "MALE" | "FEMALE" => (FEMALE_FIRST.has(name.split(" ")[0]) ? "FEMALE" : "MALE");
 
 const HOSPITALS = ["RS Cipto Mangunkusumo", "RS Pondok Indah", "RSUD Dr. Soetomo", "RS Hasan Sadikin",
   "RS Sardjito", "RSUP Adam Malik", "RS Kariadi", "RS Sanglah", "RS Wahidin Sudirohusodo",
@@ -185,7 +188,7 @@ async function main() {
     const birthY = known ? new Date(known.birth) : new Date(`${randInt(1965, 2007)}-0${randInt(1, 9)}-1${randInt(0, 8)}`);
     users.push({ id: uid, email, password: pw, name, phoneNum: phone(reg.tel),
       address: `Jl. ${rand(LAST)} No.${randInt(1, 200)}`, city: reg.city, province: reg.province, zone: reg.zone,
-      birthDate: birthY, role: "PENDONOR", createdAt });
+      birthDate: birthY, gender: genderOf(name), role: "PENDONOR", createdAt });
     donorObjs.push({ id: did, userId: uid, name, city: reg.city, bt, rh, createdAt,
       donations: 0, lastDon: null as Date | null, eligible: true, cooldownUntil: null as Date | null, reason: null as string | null });
   }
@@ -208,7 +211,7 @@ async function main() {
     users.push({ id: uid, email, password: pw, name, phoneNum: phone(reg.tel),
       city: reg.city, province: reg.province, zone: reg.zone,
       birthDate: known ? new Date(known.birth) : new Date(`${randInt(1950, 2010)}-0${randInt(1, 9)}-1${randInt(0, 8)}`),
-      role: "PASIEN", createdAt });
+      gender: genderOf(name), role: "PASIEN", createdAt });
     patients.push({ id: pid, userId: uid, nik: `32${randInt(10, 99)}${String(phoneSeq++).padStart(10, "0")}` });
     patientObjs.push({ id: pid, userId: uid, name, city: reg.city });
   }
@@ -246,7 +249,7 @@ async function main() {
       status: "COMPLETED", screeningId: scrId, checkupId: chkId, isEligible: true,
       eligibilityReason: null, createdAt: addDays(date, -randInt(1, 10)) });
     histories.push({ id: hisId, donorId: donor.id, donationDate: date, location: `${pmi.name}`,
-      volumeMl: rand([350, 450, 450, 450]), component: "WHOLE_BLOOD", note: chance(0.3) ? "Donasi rutin" : null });
+      bagCount: rand([1, 1, 1, 2]), volumeMl: rand([350, 450, 450, 450]), component: "WHOLE_BLOOD", note: chance(0.3) ? "Donasi rutin" : null });
     const expiry = addDays(date, 35);
     const expired = expiry < new Date();
     const sid2 = stkId;

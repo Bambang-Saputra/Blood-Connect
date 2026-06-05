@@ -57,6 +57,7 @@ const registerSchema = z.object({
   zone: z.string().optional(),
   address: z.string().optional(),
   birthDate: z.string().optional(),
+  gender: z.enum(["MALE", "FEMALE"]).optional(),
   role: z.enum(["PENDONOR", "PASIEN"]),
   bloodType: z.enum(["A", "B", "AB", "O"]).optional(),
   rhesusType: z.enum(["POSITIVE", "NEGATIVE"]).optional(),
@@ -92,6 +93,11 @@ export async function register(req: Request, res: Response) {
     }
   }
 
+  // Jenis kelamin wajib untuk semua akun personal (Pendonor & Pasien).
+  if (!parsed.data.gender) {
+    return res.status(400).json({ error: "Jenis kelamin wajib diisi." });
+  }
+
   const exists = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (exists) return res.status(409).json({ error: "Email sudah terdaftar" });
 
@@ -108,6 +114,7 @@ export async function register(req: Request, res: Response) {
       zone: parsed.data.zone,
       address: parsed.data.address,
       birthDate: parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
+      gender: parsed.data.gender ?? null,
       role: parsed.data.role as Role,
       ...(parsed.data.role === "PENDONOR" &&
         parsed.data.bloodType &&
@@ -194,7 +201,7 @@ export async function getMe(req: AuthedRequest, res: Response) {
     where: { id: req.user!.id },
     select: {
       id: true, email: true, name: true, phoneNum: true, address: true,
-      city: true, province: true, zone: true, birthDate: true, role: true,
+      city: true, province: true, zone: true, birthDate: true, gender: true, role: true,
       createdAt: true,
       pendonor: { select: { bloodType: true, rhesusType: true, isEligible: true, weight: true, preferredPmiId: true } },
       pasien: { select: { nik: true } },
@@ -316,6 +323,8 @@ const updateProfileSchema = z.object({
   province: z.string().optional().nullable(),
   zone: z.string().optional().nullable(),
   birthDate: z.string().optional().nullable(),
+  // gender TIDAK boleh diubah lewat update profil — atribut biologis tetap,
+  // diisi sekali saat registrasi (koreksi langka = via admin).
   password: z.string().min(8).optional(),
 });
 

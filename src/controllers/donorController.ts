@@ -343,7 +343,7 @@ export async function getMe(req: AuthedRequest, res: Response) {
   const donor = await prisma.pendonor.findUnique({
     where: { userId: req.user!.id },
     include: {
-      user: { select: { name: true, email: true, city: true, birthDate: true } },
+      user: { select: { name: true, email: true, city: true, birthDate: true, gender: true } },
       preferredPmi: { select: { id: true, pmiName: true, pmiLoc: true } },
       checkups: { orderBy: { examinedAt: "desc" }, take: 1 },
       screenings: { orderBy: { answeredAt: "desc" }, take: 1 },

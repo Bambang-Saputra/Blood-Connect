@@ -305,6 +305,7 @@ export async function completeDonation(req: AuthedRequest, res: Response) {
           donorId: donor.id,
           donationDate: now,
           location: pmi.pmiName,
+          bagCount: c.bagCount,
           volumeMl: c.volumeMl,
           component: c.component,
           note: c.note,

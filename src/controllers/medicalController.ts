@@ -127,6 +127,7 @@ const screeningSchema = z.object({
   recentSurgery: z.boolean(),
   recentTattoo: z.boolean(),
   isPregnantOrLactating: z.boolean(),
+  isMenstruating: z.boolean().optional(), // khusus wanita; pria mengirim undefined → default false
   onMedication: z.boolean(),
   hasHIVOrHepatitis: z.boolean(),
   riskySexualBehavior: z.boolean(),
@@ -151,7 +152,7 @@ export async function submitScreening(req: AuthedRequest, res: Response) {
   const a = parsed.data;
   const passed =
     !a.hasFever && !a.recentSurgery && !a.recentTattoo &&
-    !a.isPregnantOrLactating && !a.hasHIVOrHepatitis &&
+    !a.isPregnantOrLactating && !a.isMenstruating && !a.hasHIVOrHepatitis &&
     !a.riskySexualBehavior && !a.recentVaccination && !a.onMedication;
 
   // Menentukan Durasi Cooldown & Waktu Expired
@@ -166,6 +167,9 @@ export async function submitScreening(req: AuthedRequest, res: Response) {
     } else if (a.isPregnantOrLactating) {
       cooldownDays = 270; // Masa tunda kehamilan + menyusui standar
       customMessage = "Anda ditangguhkan dari donor selama masa kehamilan & menyusui (sekitar 9 bulan ke depan).";
+    } else if (a.isMenstruating) {
+      cooldownDays = 5; // Penangguhan sementara selama menstruasi
+      customMessage = "Donor ditangguhkan sementara selama masa menstruasi. Silakan kembali setelah selesai (~5 hari).";
     } else if (a.recentSurgery || a.recentTattoo) {
       cooldownDays = 180; // 6 Bulan
       customMessage = "Terdapat masa tunggu 6 bulan setelah operasi besar, tato, atau tindik.";

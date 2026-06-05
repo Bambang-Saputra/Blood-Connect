@@ -41,6 +41,11 @@ enum RhesusType {
   NEGATIVE
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum BloodComponent {
   WHOLE_BLOOD
   PRC
@@ -121,6 +126,7 @@ model User {
   province    String?
   zone        String?
   birthDate   DateTime?
+  gender      Gender?
   role        Role
   isBlocked   Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -215,6 +221,7 @@ model ScreeningAnswer {
   recentSurgery         Boolean @default(false)
   recentTattoo          Boolean @default(false)
   isPregnantOrLactating Boolean @default(false)
+  isMenstruating        Boolean @default(false)
   onMedication          Boolean @default(false)
   hasHIVOrHepatitis     Boolean @default(false)
   riskySexualBehavior   Boolean @default(false)
@@ -410,6 +417,7 @@ model DonorHistory {
   donor        Pendonor       @relation(fields: [donorId], references: [id])
   donationDate DateTime       @default(now())
   location     String
+  bagCount     Int            @default(1)   // jumlah kantong yang didonorkan pada sesi ini
   volumeMl     Int            @default(450)
   component    BloodComponent @default(WHOLE_BLOOD)
   note         String?
