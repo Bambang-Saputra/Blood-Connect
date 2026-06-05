@@ -162,7 +162,14 @@ export async function listMyRequests(req: AuthedRequest, res: Response) {
           user: { select: { name: true, email: true, city: true } },
         },
       },
-      acceptedByPmi: { select: { pmiName: true, pmiLoc: true } },
+      acceptedByPmi: {
+        select: {
+          pmiName: true,
+          pmiLoc: true,
+          // P4: kontak PMI penanggung jawab untuk pasien (koordinasi pengantaran).
+          user: { select: { phoneNum: true, email: true } },
+        },
+      },
     },
   });
 
@@ -177,7 +184,12 @@ export async function getRequest(req: AuthedRequest, res: Response) {
     where: { id: req.params.id },
     include: {
       patient: { include: { user: { select: { id: true, name: true, email: true, city: true } } } },
-      acceptedByPmi: { select: { id: true, pmiName: true, pmiLoc: true, userId: true } },
+      acceptedByPmi: {
+        select: {
+          id: true, pmiName: true, pmiLoc: true, userId: true,
+          user: { select: { phoneNum: true, email: true } },
+        },
+      },
       allocations: { include: { stock: true } },
       donorNotifs: {
         include: { donor: { include: { user: { select: { name: true, phoneNum: true } } } } },

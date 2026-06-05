@@ -219,35 +219,51 @@ export default function PatientDashboard() {
           <div className="space-y-2">
             {requests.map((r) => (
               <div key={r.id}
-                className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition group">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center font-bold shadow-sm group-hover:scale-110 transition">
-                    {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
+                className="p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition group">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center font-bold shadow-sm group-hover:scale-110 transition">
+                      {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900">{r.quantity} kantong</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        🏥 {r.targetHospitalName ?? "—"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        {new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">{r.quantity} kantong</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      🏥 {r.targetHospitalName ?? "—"}
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      {new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
-                      {r.acceptedByPmi && <> · diterima {r.acceptedByPmi.pmiName}</>}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <UrgencyBadge urgency={r.urgency} />
+                    <Badge status={r.reqStatus} />
+                    {["PENDING", "PROCESSING"].includes(r.reqStatus) && (
+                      <button
+                        onClick={() => cancelRequest(r.id)}
+                        className="text-[11px] font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded-lg transition whitespace-nowrap"
+                        title="Batalkan permintaan ini"
+                      >
+                        Batalkan
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <UrgencyBadge urgency={r.urgency} />
-                  <Badge status={r.reqStatus} />
-                  {["PENDING", "PROCESSING"].includes(r.reqStatus) && (
-                    <button
-                      onClick={() => cancelRequest(r.id)}
-                      className="text-[11px] font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded-lg transition whitespace-nowrap"
-                      title="Batalkan permintaan ini"
-                    >
-                      Batalkan
-                    </button>
-                  )}
-                </div>
+
+                {/* P4: kontak PMI penanggung jawab — tampil setelah request di-accept */}
+                {r.acceptedByPmi && (
+                  <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs space-y-1">
+                    <p className="font-semibold text-blue-900">🩸 Ditangani oleh {r.acceptedByPmi.pmiName}</p>
+                    {r.acceptedByPmi.pmiLoc && <p className="text-blue-800">📍 {r.acceptedByPmi.pmiLoc}</p>}
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-blue-700">
+                      {r.acceptedByPmi.user?.phoneNum && <span>📞 {r.acceptedByPmi.user.phoneNum}</span>}
+                      {r.acceptedByPmi.user?.email && <span>✉️ {r.acceptedByPmi.user.email}</span>}
+                    </div>
+                    <p className="text-[10px] text-blue-600/70 pt-0.5">
+                      Hubungi PMI ini untuk koordinasi pengantaran darah.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
