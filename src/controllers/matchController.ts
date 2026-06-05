@@ -1,10 +1,10 @@
 import { Response } from "express";
 import { z } from "zod";
-import { Prisma, RequestStatus, StockStatus } from "@prisma/client";
+import { Prisma, RequestStatus, StockStatus, NotificationType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AuthedRequest } from "../middleware/auth";
 import { writeAudit } from "../lib/audit";
-import { notifyRequestStatus } from "../lib/notify";
+import { notifyRequestStatus, notifyUser } from "../lib/notify";
 
 /**
  * =====================================================================
@@ -410,4 +410,68 @@ export async function updateRequestStatus(req: AuthedRequest, res: Response) {
   });
 
   return res.json({ message: "Status diperbarui", request: updated });
+}
+
+// =====================================================================
+// 6) PATCH /api/requests/:id/cancel — PASIEN batalkan request miliknya
+//    Boleh selama belum dikirim (PENDING atau PROCESSING). Jika sudah
+//    di-accept PMI (PROCESSING), PMI yang bersangkutan diberi tahu agar
+//    berhenti menyiapkan. IN_TRANSIT/FULFILLED/REJECTED/CANCELLED tidak bisa.
+// =====================================================================
+export async function cancelRequest(req: AuthedRequest, res: Response) {
+  const request = await prisma.permintaanDonor.findUnique({
+    where: { id: req.params.id },
+    include: {
+      patient: { select: { userId: true } },
+      acceptedByPmi: { select: { id: true, pmiName: true, userId: true } },
+    },
+  });
+  if (!request) return res.status(404).json({ error: "Request tidak ditemukan" });
+
+  // Ownership: hanya pasien pemilik request
+  if (request.patient?.userId !== req.user!.id) {
+    return res.status(403).json({ error: "Anda hanya bisa membatalkan permintaan milik sendiri" });
+  }
+
+  // Hanya boleh batal selama belum dikirim
+  const CANCELABLE = new Set<string>(["PENDING", "PROCESSING"]);
+  if (!CANCELABLE.has(request.reqStatus)) {
+    return res.status(400).json({
+      error:
+        request.reqStatus === "CANCELLED"
+          ? "Permintaan ini sudah dibatalkan."
+          : `Permintaan berstatus ${request.reqStatus} tidak dapat dibatalkan (darah sudah dikirim/diproses tuntas).`,
+    });
+  }
+
+  const wasProcessing = request.reqStatus === "PROCESSING";
+
+  const updated = await prisma.permintaanDonor.update({
+    where: { id: request.id },
+    data: { reqStatus: RequestStatus.CANCELLED },
+  });
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "STATUS_CHANGE",
+    entity: "PermintaanDonor",
+    entityId: updated.id,
+    before: { status: request.reqStatus },
+    after: { status: "CANCELLED", cancelledBy: "PASIEN" },
+    ipAddress: req.ip,
+  });
+
+  // Jika sudah di-accept PMI, beri tahu PMI tsb agar berhenti menyiapkan.
+  if (wasProcessing && request.acceptedByPmi?.userId) {
+    const rh = request.rhesusType === "POSITIVE" ? "+" : "-";
+    await notifyUser({
+      userId: request.acceptedByPmi.userId,
+      type: NotificationType.REQUEST_STATUS_UPDATE,
+      title: "Permintaan dibatalkan pasien",
+      body: `Pasien membatalkan permintaan darah ${request.bloodType}${rh} (${request.quantity} kantong) yang sedang Anda proses. Anda dapat menghentikan persiapan.`,
+      meta: { requestId: request.id, newStatus: "CANCELLED" },
+    });
+  }
+
+  return res.json({ message: "Permintaan dibatalkan", request: updated });
 }
