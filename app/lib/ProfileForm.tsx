@@ -21,7 +21,7 @@ import { Button, Card, Badge, Icons } from "./ui";
 export type Me = {
   id: string; email: string; name: string; phoneNum: string;
   address?: string | null; city: string; province?: string | null;
-  zone?: string | null; birthDate?: string | null; role: string;
+  zone?: string | null; birthDate?: string | null; gender?: string | null; role: string;
   availableModes?: string[];
   pendonor?: { bloodType: string; rhesusType: string; isEligible: boolean; weight?: number };
   pasien?: { nik?: string };
@@ -48,7 +48,7 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
   const [form, setForm] = useState({
     name: "", phoneNum: "", address: "",
     province: "", city: "", zone: "",
-    birthDate: "", password: "",
+    birthDate: "", gender: "", password: "",
   });
   const [saving, setSaving] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
@@ -67,6 +67,7 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
       city: data.city ?? "",
       zone: data.zone ?? "",
       birthDate: data.birthDate ? data.birthDate.slice(0, 10) : "",
+      gender: data.gender ?? "",
       password: "",
     });
   }
@@ -109,6 +110,9 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
 
   const initials = me.name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
   const backHref = backTo ?? dashboardPath(role);
+  // Mode Akun (enable-mode) DISEMBUNYIKAN sementara — endpoint /auth/me/enable-mode
+  // masih bermasalah di backend. Ubah ke true untuk menampilkannya kembali.
+  const SHOW_MODE_AKUN: boolean = false;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 pb-12">
@@ -155,8 +159,8 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
         {/* === Extra Section (role-spesifik) === */}
         {extraSection}
 
-        {/* === Enable Mode (cuma untuk PENDONOR & PASIEN) === */}
-        {(role === "PENDONOR" || role === "PASIEN") && (
+        {/* === Mode Akun (enable-mode) — disembunyikan sementara via SHOW_MODE_AKUN === */}
+        {SHOW_MODE_AKUN && (role === "PENDONOR" || role === "PASIEN") && (
           <EnableModeSection me={me} onChanged={load} />
         )}
 
@@ -168,6 +172,15 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
               <Field label="No HP" value={form.phoneNum} onChange={(v) => setForm({ ...form, phoneNum: v })} required />
               {role !== "PMI" && role !== "ADMIN" && (
                 <Field label="Tanggal Lahir" type="date" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} />
+              )}
+              {(role === "PENDONOR" || role === "PASIEN") && (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Jenis Kelamin</label>
+                  <div className="w-full border border-slate-200 px-4 py-2.5 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-between">
+                    <span>{form.gender === "MALE" ? "Pria" : form.gender === "FEMALE" ? "Wanita" : "—"}</span>
+                    <span className="text-xs text-slate-400">🔒 diatur saat registrasi</span>
+                  </div>
+                </div>
               )}
               <RegionPicker
                 province={form.province} city={form.city}

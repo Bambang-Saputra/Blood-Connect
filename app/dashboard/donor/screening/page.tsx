@@ -6,28 +6,36 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { Button, Icons } from "../../../lib/ui";
 
-const QUESTIONS = [
+// Pertanyaan umum (semua gender) + pertanyaan khusus WANITA (hamil/menyusui & haid).
+const BASE_QUESTIONS = [
   { key: "hasFever", q: "Demam dalam 7 hari terakhir?", icon: "🌡️" },
   { key: "recentSurgery", q: "Operasi besar dalam 6 bulan terakhir?", icon: "🏥" },
   { key: "recentTattoo", q: "Tato, tindik, atau akupunktur dalam 6 bulan terakhir?", icon: "🎨" },
-  { key: "isPregnantOrLactating", q: "Sedang hamil atau menyusui? (untuk perempuan)", icon: "🤰" },
   { key: "onMedication", q: "Sedang mengonsumsi obat-obatan tertentu?", icon: "💊" },
   { key: "hasHIVOrHepatitis", q: "Memiliki riwayat HIV/AIDS atau Hepatitis B/C?", icon: "⚠️" },
   { key: "riskySexualBehavior", q: "Memiliki perilaku seksual berisiko dalam 12 bulan terakhir?", icon: "🛡️" },
   { key: "recentVaccination", q: "Menerima vaksinasi dalam 2 minggu terakhir?", icon: "💉" },
 ] as const;
 
-type Key = typeof QUESTIONS[number]["key"];
+const FEMALE_QUESTIONS = [
+  { key: "isPregnantOrLactating", q: "Sedang hamil atau menyusui?", icon: "🤰" },
+  { key: "isMenstruating", q: "Sedang menstruasi (haid) saat ini?", icon: "🩸" },
+] as const;
+
+const ALL_QUESTIONS = [...BASE_QUESTIONS, ...FEMALE_QUESTIONS];
+
+type Key = typeof ALL_QUESTIONS[number]["key"];
 
 export default function ScreeningPage() {
   const router = useRouter();
   
   // State Data
   const [answers, setAnswers] = useState<Record<Key, boolean | null>>(() =>
-    Object.fromEntries(QUESTIONS.map((q) => [q.key, null])) as any
+    Object.fromEntries(ALL_QUESTIONS.map((q) => [q.key, null])) as any
   );
   const [details, setDetails] = useState("");
-  
+  const [gender, setGender] = useState<string | null>(null); // dari /donor/me — penentu pertanyaan
+
   // State UI
   const [loadingData, setLoadingData] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -35,9 +43,11 @@ export default function ScreeningPage() {
   const [showModal, setShowModal] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false); // Penanda Mode Tinjauan
 
-  const answeredCount = Object.values(answers).filter((v) => v !== null).length;
-  const progress = (answeredCount / QUESTIONS.length) * 100;
-  const allAnswered = answeredCount === QUESTIONS.length;
+  // Pertanyaan yang tampil tergantung gender: WANITA dapat tambahan hamil & haid.
+  const visibleQuestions = gender === "FEMALE" ? [...BASE_QUESTIONS, ...FEMALE_QUESTIONS] : [...BASE_QUESTIONS];
+  const answeredCount = visibleQuestions.filter((q) => answers[q.key] !== null).length;
+  const progress = (answeredCount / visibleQuestions.length) * 100;
+  const allAnswered = answeredCount === visibleQuestions.length;
 
   // Fetch data skrining terakhir saat halaman dimuat
   useEffect(() => {
@@ -46,12 +56,18 @@ export default function ScreeningPage() {
         const res = await api("/donor/me");
         if (res.ok) {
           const data = await res.json();
+          setGender(data.user?.gender ?? null);
           const lastScreening = data.screenings?.[0];
 
-          // Jika ada skrining aktif/dalam masa cooldown, ubah jadi mode Read-Only
-          if (lastScreening) {
+          // Skrining kadaluarsa (validUntil < now) → biarkan form KOSONG & editable
+          // supaya donor bisa skrining ulang. Hanya skrining yang masih berlaku yang
+          // ditampilkan dalam mode Read-Only (tinjauan).
+          const expired = lastScreening?.validUntil
+            ? new Date(lastScreening.validUntil) < new Date()
+            : false;
+          if (lastScreening && !expired) {
             const mappedAnswers: any = {};
-            QUESTIONS.forEach(q => {
+            ALL_QUESTIONS.forEach(q => {
               mappedAnswers[q.key] = lastScreening[q.key] ?? null;
             });
             setAnswers(mappedAnswers);
@@ -81,9 +97,22 @@ export default function ScreeningPage() {
     if (!allAnswered || isReadOnly) return;
     
     setSubmitting(true);
+    // Kirim semua field wajib; pertanyaan khusus wanita yang tak tampil (pria) → false.
+    const body = {
+      hasFever: answers.hasFever,
+      recentSurgery: answers.recentSurgery,
+      recentTattoo: answers.recentTattoo,
+      isPregnantOrLactating: answers.isPregnantOrLactating ?? false,
+      isMenstruating: answers.isMenstruating ?? false,
+      onMedication: answers.onMedication,
+      hasHIVOrHepatitis: answers.hasHIVOrHepatitis,
+      riskySexualBehavior: answers.riskySexualBehavior,
+      recentVaccination: answers.recentVaccination,
+      details,
+    };
     const res = await api("/medical/screening", {
       method: "POST",
-      body: JSON.stringify({ ...answers, details }),
+      body: JSON.stringify(body),
     });
     
     setResult(await res.json());
@@ -157,7 +186,7 @@ export default function ScreeningPage() {
               {!isReadOnly && (
                 <div className="mt-6">
                   <div className="flex justify-between text-xs text-red-100 mb-1.5">
-                    <span>{answeredCount} dari {QUESTIONS.length} pertanyaan</span>
+                    <span>{answeredCount} dari {visibleQuestions.length} pertanyaan</span>
                     <span>{Math.round(progress)}%</span>
                   </div>
                   <div className="h-2 bg-white/20 rounded-full overflow-hidden">
@@ -192,7 +221,7 @@ export default function ScreeningPage() {
                 </p>
               )}
 
-              {QUESTIONS.map((q, idx) => (
+              {visibleQuestions.map((q, idx) => (
                 <div key={q.key}
                   className={`border-2 rounded-xl p-4 transition-all ${
                     answers[q.key] !== null ? "border-slate-200 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"
@@ -250,7 +279,7 @@ export default function ScreeningPage() {
                   <Button type="submit" loading={submitting} disabled={!allAnswered}
                     fullWidth size="lg" icon={<Icons.Check />}>
                     {!allAnswered
-                      ? `Jawab ${QUESTIONS.length - answeredCount} pertanyaan lagi`
+                      ? `Jawab ${visibleQuestions.length - answeredCount} pertanyaan lagi`
                       : "Kirim Jawaban"}
                   </Button>
                 </div>

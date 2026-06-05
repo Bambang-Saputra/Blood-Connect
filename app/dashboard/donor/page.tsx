@@ -6,7 +6,6 @@ import { api, clearToken } from "../../lib/api";
 import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
-import { ModeSwitcher } from "../../lib/ModeSwitcher";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
 export default function DonorDashboard() {
@@ -51,16 +50,23 @@ export default function DonorDashboard() {
   // Cek apakah ada jadwal yang sedang aktif (belum selesai/ditolak)
   const activeSchedule = mySchedules.find(s => s.status === "PENDING" || s.status === "CONFIRMED");
 
-  // Sorting PMI terdekat
+  // Sorting + filter PMI berdasarkan lokasi PROFIL pendonor.
+  // Hanya tampilkan PMI yang se-region (kota/zona/provinsi) — donor di Jakarta
+  // tidak masuk akal mendonor di PMI Makassar. Fallback: tampilkan semua jika
+  // tak ada satu pun PMI se-region (agar daftar tidak kosong).
   const sortedPmis = useMemo(() => {
-    if (!authMe) return pmiList;
-    return [...pmiList].sort((a, b) => {
-      const score = (p: any) =>
-        p.user?.city === authMe.city ? 3 :
-        p.user?.zone === authMe.zone ? 2 :
-        p.user?.province === authMe.province ? 1 : 0;
-      return score(b) - score(a);
-    });
+    const score = (p: any) =>
+      !authMe ? 0 :
+      p.user?.city === authMe.city ? 3 :
+      p.user?.zone && p.user?.zone === authMe.zone ? 2 :
+      p.user?.province && p.user?.province === authMe.province ? 1 : 0;
+    // HANYA PMI se-region (kota/zona/provinsi). Jika kosong → tampilkan empty
+    // state "belum ada PMI terdekat" (bukan menampilkan PMI luar provinsi yang
+    // membingungkan — donor tak akan mendonor lintas provinsi).
+    return [...pmiList]
+      .map((p) => ({ ...p, _score: score(p) }))
+      .filter((p) => p._score > 0)
+      .sort((a, b) => b._score - a._score);
   }, [pmiList, authMe]);
 
   async function submitSchedule(e: React.FormEvent) {
@@ -110,9 +116,14 @@ export default function DonorDashboard() {
   
 
   const lastScreening = me.screenings?.[0];
-  const hasScreening = !!lastScreening; // Ngecek apakah user udah pernah ngisi (apapun hasilnya)
-  const hasPassedScreening = lastScreening?.passed === true;
-  const isCooldown = hasScreening && !hasPassedScreening; // Udah ngisi, TAPI nggak lulus
+  // Skrining kadaluarsa (validUntil < now) diperlakukan SEPERTI BELUM mengisi,
+  // supaya donor bisa skrining ulang — bukan stuck di state "Layak Donor".
+  const screeningExpired = lastScreening?.validUntil
+    ? new Date(lastScreening.validUntil) < new Date()
+    : false;
+  const hasScreening = !!lastScreening && !screeningExpired; // expired = anggap belum isi
+  const hasPassedScreening = hasScreening && lastScreening?.passed === true;
+  const isCooldown = hasScreening && !hasPassedScreening; // udah ngisi (masih berlaku), TAPI nggak lulus
 
   return (
     /* INI KANVAS BACKGROUND-NYA (Tag DIV baru) */
@@ -171,7 +182,6 @@ export default function DonorDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <ModeSwitcher currentRole="PENDONOR" />
             <NotificationBell />
             <Link href="/dashboard/donor/profile">
               <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
@@ -312,13 +322,23 @@ export default function DonorDashboard() {
             <h3 className="text-xl font-bold text-slate-800">🏥 Cari Lokasi PMI Terdekat</h3>
             <p className="text-sm text-slate-500">Daftar PMI yang tersedia untuk donor darah, diurutkan dari lokasimu.</p>
           </div>
-          
-<div className="grid md:grid-cols-3 gap-4 lg:gap-6">
-            {sortedPmis.map((p, idx) => {
-              const isClosest = p.user?.city === authMe?.city;
-              // Dummy jarak random (karena belum ada integrasi Google Maps/LatLong)
-              const dummyDistance = isClosest ? (Math.random() * 4 + 1).toFixed(1) : (Math.random() * 15 + 5).toFixed(1);
-              
+
+          {sortedPmis.length === 0 ? (
+            <EmptyState
+              icon="📍"
+              title="Belum ada PMI terdekat tersedia"
+              description={`Saat ini belum ada PMI terverifikasi di wilayah Anda${authMe?.city ? ` (${authMe.city}${authMe?.province ? `, ${authMe.province}` : ""})` : ""}. Silakan cek kembali nanti — PMI baru akan muncul setelah diverifikasi.`}
+            />
+          ) : (
+          <div className="grid md:grid-cols-3 gap-4 lg:gap-6">
+            {sortedPmis.map((p) => {
+              const isClosest = p._score === 3;
+              // Label region (bukan jarak palsu) — tanpa integrasi geolokasi nyata.
+              const regionLabel =
+                p._score === 3 ? "📍 Dalam kota Anda" :
+                p._score === 2 ? "📍 Satu wilayah" :
+                p._score === 1 ? "📍 Satu provinsi" : "📍 Luar provinsi";
+
               return (
                 <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all flex flex-col overflow-hidden group">
                   
@@ -340,7 +360,7 @@ export default function DonorDashboard() {
                         </span>
                       ) : <div></div>}
                       <span className="bg-white/90 backdrop-blur-sm text-slate-700 text-[10px] font-bold px-2 py-1 rounded-md shadow-sm">
-                        🚗 {dummyDistance} km
+                        {regionLabel}
                       </span>
                     </div>
 
@@ -373,6 +393,7 @@ export default function DonorDashboard() {
               );
             })}
           </div>
+          )}
         </section>
       )}
 
@@ -430,7 +451,7 @@ export default function DonorDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
-                    <th className="py-2">Tanggal</th><th>Lokasi</th><th>Komponen</th><th>Volume</th>
+                    <th className="py-2">Tanggal</th><th>Lokasi</th><th>Komponen</th><th>Jumlah Kantong</th><th>Volume</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -439,6 +460,7 @@ export default function DonorDashboard() {
                       <td className="py-2.5">{new Date(h.donationDate).toLocaleDateString("id-ID", { dateStyle: "medium" })}</td>
                       <td>{h.location}</td>
                       <td>{h.component}</td>
+                      <td className="font-medium">{h.bagCount ?? 1} kantong</td>
                       <td className="font-medium">{h.volumeMl} mL</td>
                     </tr>
                   ))}

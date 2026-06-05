@@ -95,6 +95,7 @@ export default function PmiDashboard() {
   const [loading, setLoading] = useState(true);
   const [showAddStock, setShowAddStock] = useState(false);
   const [showBroadcastForm, setShowBroadcastForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<"stok" | "pendonor" | "pasien">("stok");
 
   useEffect(() => {
     if (guardMe) refresh();
@@ -162,6 +163,14 @@ export default function PmiDashboard() {
   const pendingSchedules = schedules.filter((s) => s.status === "PENDING").length;
   const openBroadcasts = broadcasts.filter((b) => b.status === "OPEN").length;
 
+  // Pisahkan AKTIF vs RIWAYAT untuk tiap kategori (riwayat = sudah final).
+  const activeBroadcasts = broadcasts.filter((b) => b.status === "OPEN");
+  const historyBroadcasts = broadcasts.filter((b) => b.status !== "OPEN");
+  const activeSchedules = schedules.filter((s) => !["COMPLETED", "REJECTED", "CANCELLED"].includes(s.status));
+  const historySchedules = schedules.filter((s) => ["COMPLETED", "REJECTED", "CANCELLED"].includes(s.status));
+  const activeReqs = requests.filter((r) => !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus));
+  const historyReqs = requests.filter((r) => ["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus));
+
   if (guardLoading || !guardMe) {
     return (
       <main className="min-h-screen flex items-center justify-center">
@@ -178,12 +187,6 @@ export default function PmiDashboard() {
           <p className="text-sm text-slate-500 mt-1">Kelola stok darah, permintaan pasien, & jadwal donor</p>
         </div>
         <div className="flex gap-2 items-center">
-          <Button variant="danger" size="sm" icon={<span>📢</span>} onClick={() => setShowBroadcastForm(!showBroadcastForm)}>
-            {showBroadcastForm ? "Tutup" : "Broadcast Stok"}
-          </Button>
-          <Button variant="success" size="sm" icon={showAddStock ? <Icons.X /> : <Icons.Plus />} onClick={() => setShowAddStock(!showAddStock)}>
-            {showAddStock ? "Tutup" : "Tambah Stok"}
-          </Button>
           <NotificationBell />
           <Link href="/dashboard/pmi/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>
@@ -213,235 +216,280 @@ export default function PmiDashboard() {
         <StatCard icon="📢" label="Broadcast Aktif" value={openBroadcasts} gradient="from-amber-500 to-orange-600" />
       </section>
 
-      {/* Stock Chart */}
-      <Card title="📊 Ketersediaan Stok per Golongan Darah" subtitle="Total kantong AVAILABLE di PMI Anda, belum expired" icon={<Icons.Drop />}>
-        {chartData.length === 0 ? (
-          <EmptyState icon="📉" title="Belum ada data" description="Tambah stok darah untuk melihat chart." />
-        ) : (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                <YAxis stroke="#64748b" fontSize={12} allowDecimals={false} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} formatter={(v) => [`${v} kantong`, "Stok"]} />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                  {chartData.map((d, i) => {
-                    // Color tiering: 0 = abu, <5 = merah, <20 = oranye, else hijau
-                    const color = d.total === 0 ? "#cbd5e1" : d.total < 5 ? "#ef4444" : d.total < 20 ? "#f59e0b" : "#10b981";
-                    return <Cell key={i} fill={color} />;
-                  })}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+      {/* TAB NAV */}
+      <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-fit">
+        <TabButton active={activeTab === "stok"} onClick={() => setActiveTab("stok")} label="🩸 Stok Darah" />
+        <TabButton active={activeTab === "pendonor"} onClick={() => setActiveTab("pendonor")} label={`🧑‍🤝‍🧑 Aktivitas Pendonor (${activeSchedules.length + activeBroadcasts.length})`} />
+        <TabButton active={activeTab === "pasien"} onClick={() => setActiveTab("pasien")} label={`🏥 Aktivitas Pasien (${activeReqs.length})`} />
+      </div>
+
+      {/* ============================ TAB: STOK ============================ */}
+      {activeTab === "stok" && (
+        <div className="space-y-6">
+          <div className="flex justify-end">
+            <Button variant="success" size="sm" icon={showAddStock ? <Icons.X /> : <Icons.Plus />} onClick={() => setShowAddStock(!showAddStock)}>
+              {showAddStock ? "Tutup Form" : "Tambah Stok"}
+            </Button>
           </div>
-        )}
-        <div className="text-[10px] text-slate-500 flex flex-wrap gap-3 mt-2 justify-center">
-          <span>🔴 Kritis (&lt;5)</span>
-          <span>🟠 Tipis (&lt;20)</span>
-          <span>🟢 Cukup (≥20)</span>
-          <span>⚪ Kosong (0)</span>
-        </div>
-      </Card>
 
-      {/* Form Broadcast Permintaan Stok */}
-      {showBroadcastForm && (
-        <BroadcastForm
-          onCreated={() => {
-            setShowBroadcastForm(false);
-            refresh();
-          }}
-          onCancel={() => setShowBroadcastForm(false)}
-        />
-      )}
+          {showAddStock && (
+            <AddStockForm onCreated={() => { setShowAddStock(false); refresh(); }} onCancel={() => setShowAddStock(false)} />
+          )}
 
-      {/* Form Tambah Stok */}
-      {showAddStock && (
-        <AddStockForm
-          onCreated={() => {
-            setShowAddStock(false);
-            refresh();
-          }}
-          onCancel={() => setShowAddStock(false)}
-        />
-      )}
+          <Card title="📊 Ketersediaan Stok per Golongan Darah" subtitle="Total kantong AVAILABLE di PMI Anda, belum expired" icon={<Icons.Drop />}>
+            {chartData.length === 0 ? (
+              <EmptyState icon="📉" title="Belum ada data" description="Tambah stok darah untuk melihat chart." />
+            ) : (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                    <YAxis stroke="#64748b" fontSize={12} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} formatter={(v) => [`${v} kantong`, "Stok"]} />
+                    <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                      {chartData.map((d, i) => {
+                        const color = d.total === 0 ? "#cbd5e1" : d.total < 5 ? "#ef4444" : d.total < 20 ? "#f59e0b" : "#10b981";
+                        return <Cell key={i} fill={color} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <div className="text-[10px] text-slate-500 flex flex-wrap gap-3 mt-2 justify-center">
+              <span>🔴 Kritis (&lt;5)</span>
+              <span>🟠 Tipis (&lt;20)</span>
+              <span>🟢 Cukup (≥20)</span>
+              <span>⚪ Kosong (0)</span>
+            </div>
+          </Card>
 
-      {/* Daftar Broadcast PMI */}
-      {broadcasts.length > 0 && (
-        <Card title={`📢 Broadcast Permintaan Stok (${broadcasts.length})`} subtitle="Broadcast yang Anda kirim ke donor satu kota" icon={<Icons.Heart />}>
-          <div className="space-y-2">
-            {broadcasts.map((b) => {
-              const golongan = `${b.bloodType}${b.rhesusType === "POSITIVE" ? "+" : "-"}`;
-              return (
-                <div key={b.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">{golongan}</div>
-                    <div>
-                      <p className="font-semibold text-slate-900 text-sm">
-                        Target {b.targetQuantity} kantong {golongan}
-                      </p>
-                      {b.message && <p className="text-xs text-slate-500 mt-0.5 italic">"{b.message}"</p>}
-                      <p className="text-[10px] text-slate-400 mt-0.5">Dibuat {new Date(b.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}</p>
-                    </div>
+          <Card title="Stok Darah PMI Anda" subtitle={`${stocks.length} batch · ${totalAvailable} kantong AVAILABLE`} icon={<Icons.Drop />}>
+            {stocks.length === 0 ? (
+              <EmptyState icon="📦" title="Belum ada stok" description="Tambah stok darah lewat tombol di atas." />
+            ) : (
+              <CollapsibleList items={stocks} limit={10}>
+                {(shown) => (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-slate-500 uppercase font-semibold border-b border-slate-200">
+                          <th className="py-2">Golongan</th>
+                          <th>Komponen</th>
+                          <th>Qty</th>
+                          <th>Expiry</th>
+                          <th>Lokasi</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map((s) => (
+                          <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                            <td className="py-2"><span className="font-bold text-red-600">{s.bloodType}{s.rhesusType === "POSITIVE" ? "+" : "-"}</span></td>
+                            <td>{s.component}</td>
+                            <td className="font-medium">{s.quantity}</td>
+                            <td>{new Date(s.expiryDate).toLocaleDateString("id-ID")}</td>
+                            <td>{s.location}</td>
+                            <td><Badge status={s.status} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge status={b.status} />
-                    {b.status === "OPEN" && (
-                      <Button size="sm" variant="ghost" onClick={() => closeBroadcast(b.id)}>
-                        Tutup
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Request Panel — broadcast + own claimed */}
-      <Card title={`Permintaan Darah Pasien (${requests.length})`} subtitle="Broadcast nasional — PMI pertama yang accept akan memproses" icon={<Icons.Heart />}>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : requests.length === 0 ? (
-          <EmptyState icon="📭" title="Belum ada permintaan" description="Permintaan dari pasien akan muncul di sini." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
-                  <th className="py-2 pr-2">Tanggal</th>
-                  <th className="px-2">Golongan</th>
-                  <th className="px-2">Qty</th>
-                  <th className="px-2">RS Tujuan Kirim</th>
-                  <th className="px-2">Email Pasien</th>
-                  <th className="px-2">Status</th>
-                  <th className="px-2">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition align-top">
-                    <td className="py-3 pr-2 text-xs text-slate-600 whitespace-nowrap">{new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}</td>
-                    <td className="px-2">
-                      <span className="font-bold text-red-600">
-                        {r.bloodType}
-                        {r.rhesusType === "POSITIVE" ? "+" : "-"}
-                      </span>
-                    </td>
-                    <td className="px-2 font-medium">{r.quantity}</td>
-                    <td className="px-2">
-                      <p className="font-semibold text-slate-900 text-xs">{r.targetHospitalName ?? "—"}</p>
-                      {r.targetHospitalAddress && <p className="text-[10px] text-slate-500 mt-0.5">{r.targetHospitalAddress}</p>}
-                    </td>
-                    <td className="px-2 text-xs text-slate-700">
-                      {r.patient?.user?.email ?? "—"}
-                      <p className="text-[10px] text-slate-400">{r.patient?.user?.city}</p>
-                    </td>
-                    <td className="px-2">
-                      <Badge status={r.reqStatus} />
-                    </td>
-                    <td className="px-2 whitespace-nowrap">
-                      {r.reqStatus === "PENDING" ? (
-                        <Button size="sm" variant="success" icon={<Icons.Check />} onClick={() => acceptRequest(r.id)}>
-                          Accept
-                        </Button>
-                      ) : r.acceptedByPmi && !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus) ? (
-                        <div className="flex gap-1">
-                          {r.reqStatus === "PROCESSING" && (
-                            <Button size="sm" onClick={() => updateRequestStatus(r.id, "IN_TRANSIT")}>
-                              🚑 Kirim
-                            </Button>
-                          )}
-                          <Button size="sm" variant="success" icon={<Icons.Check />} onClick={() => updateRequestStatus(r.id, "FULFILLED")}>
-                            Fulfill
-                          </Button>
-                          <Button size="sm" variant="secondary" icon={<Icons.X />} onClick={() => updateRequestStatus(r.id, "REJECTED")}>
-                            Reject
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* Schedule Panel — scoped ke PMI ini */}
-      <Card title={`Jadwal Donor di PMI Anda (${schedules.length})`} subtitle="Hanya menampilkan donor yang mendaftar ke PMI Anda (bukan broadcast)" icon={<Icons.Calendar />}>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-slate-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : schedules.length === 0 ? (
-          <EmptyState icon="📅" title="Belum ada jadwal" description="Pendonor yang mendaftar ke PMI Anda akan muncul di sini." />
-        ) : (
-          <div className="space-y-3">
-            {schedules.map((s) => (
-              <ScheduleRow key={s.id} schedule={s} onChange={refresh} />
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Stok Grid (detail) */}
-      <Card title="Stok Darah PMI Anda" subtitle={`${stocks.length} batch · ${totalAvailable} kantong AVAILABLE`} icon={<Icons.Drop />}>
-        <details className="text-sm">
-          <summary className="cursor-pointer text-slate-600 hover:text-slate-900 font-medium py-2">📦 Lihat detail per batch ({stocks.length})</summary>
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500 uppercase font-semibold border-b border-slate-200">
-                  <th className="py-2">Golongan</th>
-                  <th>Komponen</th>
-                  <th>Qty</th>
-                  <th>Expiry</th>
-                  <th>Lokasi</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stocks.map((s) => (
-                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="py-2">
-                      <span className="font-bold text-red-600">
-                        {s.bloodType}
-                        {s.rhesusType === "POSITIVE" ? "+" : "-"}
-                      </span>
-                    </td>
-                    <td>{s.component}</td>
-                    <td className="font-medium">{s.quantity}</td>
-                    <td>{new Date(s.expiryDate).toLocaleDateString("id-ID")}</td>
-                    <td>{s.location}</td>
-                    <td>
-                      <Badge status={s.status} />
-                    </td>
-                  </tr>
-                ))}
-                {stocks.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-slate-400">
-                      Belum ada stok
-                    </td>
-                  </tr>
                 )}
-              </tbody>
-            </table>
+              </CollapsibleList>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ========================== TAB: PENDONOR ========================== */}
+      {activeTab === "pendonor" && (
+        <div className="space-y-6">
+          <div className="flex justify-end">
+            <Button variant="danger" size="sm" icon={<span>📢</span>} onClick={() => setShowBroadcastForm(!showBroadcastForm)}>
+              {showBroadcastForm ? "Tutup Form" : "Broadcast Stok ke Donor"}
+            </Button>
           </div>
-        </details>
-      </Card>
+
+          {showBroadcastForm && (
+            <BroadcastForm onCreated={() => { setShowBroadcastForm(false); refresh(); }} onCancel={() => setShowBroadcastForm(false)} />
+          )}
+
+          <Card title={`📢 Broadcast Aktif (${activeBroadcasts.length})`} subtitle="Permintaan stok yang sedang terbuka ke donor sekota" icon={<Icons.Heart />}>
+            {activeBroadcasts.length === 0 ? (
+              <EmptyState icon="📢" title="Tidak ada broadcast aktif" description="Buat broadcast untuk meminta stok ke donor terdekat." />
+            ) : (
+              <CollapsibleList items={activeBroadcasts} limit={10}>
+                {(shown) => <div className="space-y-2">{shown.map((b) => <BroadcastRow key={b.id} b={b} onClose={closeBroadcast} />)}</div>}
+              </CollapsibleList>
+            )}
+          </Card>
+
+          {historyBroadcasts.length > 0 && (
+            <Card title={`🗂️ Riwayat Broadcast (${historyBroadcasts.length})`} subtitle="Broadcast yang sudah ditutup atau kadaluarsa" icon={<Icons.Calendar />}>
+              <CollapsibleList items={historyBroadcasts} limit={10}>
+                {(shown) => <div className="space-y-2">{shown.map((b) => <BroadcastRow key={b.id} b={b} onClose={closeBroadcast} />)}</div>}
+              </CollapsibleList>
+            </Card>
+          )}
+
+          <Card title={`📅 Jadwal Donor Aktif (${activeSchedules.length})`} subtitle="Donor yang mendaftar ke PMI Anda — skrining, cek fisik, & selesaikan donasi" icon={<Icons.Calendar />}>
+            {loading ? (
+              <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-20 bg-slate-100 rounded-xl animate-pulse" />)}</div>
+            ) : activeSchedules.length === 0 ? (
+              <EmptyState icon="📅" title="Belum ada jadwal aktif" description="Pendonor yang mendaftar ke PMI Anda akan muncul di sini." />
+            ) : (
+              <CollapsibleList items={activeSchedules} limit={10}>
+                {(shown) => <div className="space-y-3">{shown.map((s) => <ScheduleRow key={s.id} schedule={s} onChange={refresh} />)}</div>}
+              </CollapsibleList>
+            )}
+          </Card>
+
+          {historySchedules.length > 0 && (
+            <Card title={`🗂️ Riwayat Jadwal Donor (${historySchedules.length})`} subtitle="Donasi selesai, jadwal ditolak, atau dibatalkan" icon={<Icons.Calendar />}>
+              <CollapsibleList items={historySchedules} limit={10}>
+                {(shown) => <div className="space-y-3">{shown.map((s) => <ScheduleRow key={s.id} schedule={s} onChange={refresh} />)}</div>}
+              </CollapsibleList>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* =========================== TAB: PASIEN =========================== */}
+      {activeTab === "pasien" && (
+        <div className="space-y-6">
+          <Card title={`Permintaan Darah Aktif (${activeReqs.length})`} subtitle="Broadcast nasional — PMI pertama yang accept akan memproses" icon={<Icons.Heart />}>
+            {loading ? (
+              <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}</div>
+            ) : (
+              <CollapsibleList items={activeReqs} limit={10}>
+                {(shown) => <RequestTable requests={shown} onAccept={acceptRequest} onUpdate={updateRequestStatus} emptyTitle="Belum ada permintaan aktif" emptyDesc="Permintaan dari pasien akan muncul di sini." />}
+              </CollapsibleList>
+            )}
+          </Card>
+
+          {historyReqs.length > 0 && (
+            <Card title={`🗂️ Riwayat Permintaan Darah (${historyReqs.length})`} subtitle="Permintaan yang sudah terpenuhi, ditolak, atau dibatalkan" icon={<Icons.Calendar />}>
+              <CollapsibleList items={historyReqs} limit={10}>
+                {(shown) => <RequestTable requests={shown} onAccept={acceptRequest} onUpdate={updateRequestStatus} emptyTitle="Belum ada riwayat" emptyDesc="—" />}
+              </CollapsibleList>
+            </Card>
+          )}
+        </div>
+      )}
     </main>
+  );
+}
+
+// =====================================================================
+// HELPERS: TabButton, CollapsibleList (show-more), BroadcastRow, RequestTable
+// =====================================================================
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
+        active ? "bg-white text-red-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Show-more wrapper: tampilkan maksimal `limit` item, sisanya di balik tombol.
+function CollapsibleList<T,>({ items, limit = 10, children }: { items: T[]; limit?: number; children: (items: T[]) => React.ReactNode }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? items : items.slice(0, limit);
+  return (
+    <>
+      {children(shown)}
+      {items.length > limit && (
+        <div className="text-center mt-3">
+          <Button variant="ghost" size="sm" onClick={() => setShowAll(!showAll)}>
+            {showAll ? "Tampilkan lebih sedikit ▲" : `Tampilkan ${items.length - limit} lainnya ▼`}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function BroadcastRow({ b, onClose }: { b: any; onClose: (id: string) => void }) {
+  const golongan = `${b.bloodType}${b.rhesusType === "POSITIVE" ? "+" : "-"}`;
+  return (
+    <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">{golongan}</div>
+        <div>
+          <p className="font-semibold text-slate-900 text-sm">Target {b.targetQuantity} kantong {golongan}</p>
+          {b.message && <p className="text-xs text-slate-500 mt-0.5 italic">"{b.message}"</p>}
+          <p className="text-[10px] text-slate-400 mt-0.5">Dibuat {new Date(b.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge status={b.status} />
+        {b.status === "OPEN" && (
+          <Button size="sm" variant="ghost" onClick={() => onClose(b.id)}>Tutup</Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RequestTable({ requests, onAccept, onUpdate, emptyTitle, emptyDesc }: { requests: Req[]; onAccept: (id: string) => void; onUpdate: (id: string, s: string) => void; emptyTitle: string; emptyDesc: string }) {
+  if (requests.length === 0) return <EmptyState icon="📭" title={emptyTitle} description={emptyDesc} />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
+            <th className="py-2 pr-2">Tanggal</th>
+            <th className="px-2">Golongan</th>
+            <th className="px-2">Qty</th>
+            <th className="px-2">RS Tujuan Kirim</th>
+            <th className="px-2">Email Pasien</th>
+            <th className="px-2">Status</th>
+            <th className="px-2">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {requests.map((r) => (
+            <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition align-top">
+              <td className="py-3 pr-2 text-xs text-slate-600 whitespace-nowrap">{new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}</td>
+              <td className="px-2"><span className="font-bold text-red-600">{r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}</span></td>
+              <td className="px-2 font-medium">{r.quantity}</td>
+              <td className="px-2">
+                <p className="font-semibold text-slate-900 text-xs">{r.targetHospitalName ?? "—"}</p>
+                {r.targetHospitalAddress && <p className="text-[10px] text-slate-500 mt-0.5">{r.targetHospitalAddress}</p>}
+              </td>
+              <td className="px-2 text-xs text-slate-700">
+                {r.patient?.user?.email ?? "—"}
+                <p className="text-[10px] text-slate-400">{r.patient?.user?.city}</p>
+              </td>
+              <td className="px-2"><Badge status={r.reqStatus} /></td>
+              <td className="px-2 whitespace-nowrap">
+                {r.reqStatus === "PENDING" ? (
+                  <Button size="sm" variant="success" icon={<Icons.Check />} onClick={() => onAccept(r.id)}>Accept</Button>
+                ) : r.acceptedByPmi && !["FULFILLED", "REJECTED", "CANCELLED"].includes(r.reqStatus) ? (
+                  <div className="flex gap-1">
+                    {r.reqStatus === "PROCESSING" && (
+                      <Button size="sm" onClick={() => onUpdate(r.id, "IN_TRANSIT")}>🚑 Kirim</Button>
+                    )}
+                    <Button size="sm" variant="success" icon={<Icons.Check />} onClick={() => onUpdate(r.id, "FULFILLED")}>Fulfill</Button>
+                    <Button size="sm" variant="secondary" icon={<Icons.X />} onClick={() => onUpdate(r.id, "REJECTED")}>Reject</Button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

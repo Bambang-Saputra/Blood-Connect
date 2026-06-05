@@ -6,8 +6,29 @@ import { api, clearToken } from "../../lib/api";
 import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
 import { NotificationBell } from "../../lib/NotificationBell";
-import { ModeSwitcher } from "../../lib/ModeSwitcher";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
+
+// Daftar RS rujukan + alamat (kurasi dari Google Maps) — dropdown agar lokasi
+// antar darah akurat & konsisten (tidak salah ketik). Opsi "Lainnya" untuk manual.
+const HOSPITALS: { name: string; address: string; city: string }[] = [
+  { name: "RSUPN Dr. Cipto Mangunkusumo", address: "Jl. Diponegoro No.71, Jakarta Pusat", city: "Jakarta" },
+  { name: "RSUP Fatmawati", address: "Jl. RS Fatmawati Raya No.4, Cilandak, Jakarta Selatan", city: "Jakarta" },
+  { name: "RS Pondok Indah", address: "Jl. Metro Duta Kav. UE, Pondok Indah, Jakarta Selatan", city: "Jakarta" },
+  { name: "RSUP Persahabatan", address: "Jl. Persahabatan Raya No.1, Rawamangun, Jakarta Timur", city: "Jakarta" },
+  { name: "RSUD Dr. Soetomo", address: "Jl. Mayjen Prof. Dr. Moestopo No.6-8, Surabaya", city: "Surabaya" },
+  { name: "RS Premier Surabaya", address: "Jl. Nginden Intan Barat, Surabaya", city: "Surabaya" },
+  { name: "RSUP Dr. Hasan Sadikin", address: "Jl. Pasteur No.38, Pasteur, Bandung", city: "Bandung" },
+  { name: "RS Santo Borromeus", address: "Jl. Ir. H. Juanda No.100, Bandung", city: "Bandung" },
+  { name: "RSUP Dr. Sardjito", address: "Jl. Kesehatan No.1, Sekip, Sleman, Yogyakarta", city: "Yogyakarta" },
+  { name: "RSUP H. Adam Malik", address: "Jl. Bunga Lau No.17, Kemenangan Tani, Medan", city: "Medan" },
+  { name: "RSUP Dr. Kariadi", address: "Jl. Dr. Sutomo No.16, Semarang", city: "Semarang" },
+  { name: "RSUP Prof. Ngoerah (Sanglah)", address: "Jl. Diponegoro, Dauh Puri Klod, Denpasar", city: "Denpasar" },
+  { name: "RSUP Dr. Wahidin Sudirohusodo", address: "Jl. Perintis Kemerdekaan KM.11, Makassar", city: "Makassar" },
+];
+const HOSPITALS_BY_CITY = HOSPITALS.reduce((acc, h) => {
+  (acc[h.city] ??= []).push(h);
+  return acc;
+}, {} as Record<string, typeof HOSPITALS>);
 
 /**
  * DASHBOARD: PASIEN
@@ -20,6 +41,7 @@ export default function PatientDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [useManualHospital, setUseManualHospital] = useState(false);
   const [form, setForm] = useState({
     bloodType: "O",
     rhesusType: "POSITIVE",
@@ -96,7 +118,6 @@ export default function PatientDashboard() {
           <p className="text-sm text-slate-500 mt-1">Ajukan permintaan darah & pantau statusnya</p>
         </div>
         <div className="flex items-center gap-2">
-          <ModeSwitcher currentRole="PASIEN" />
           <NotificationBell />
           <Link href="/dashboard/patient/profile">
             <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
@@ -154,25 +175,55 @@ export default function PatientDashboard() {
             </div>
           </div>
 
-          {/* RS tujuan kirim — replacement untuk urgency input */}
+          {/* RS tujuan kirim — dropdown RS (alamat auto dari daftar) + opsi manual */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">🏥 RS Tujuan Kirim</p>
-            <div className="grid md:grid-cols-2 gap-2">
-              <input
-                type="text" required
-                value={form.targetHospitalName}
-                onChange={(e) => setForm({ ...form, targetHospitalName: e.target.value })}
-                placeholder="Nama RS tempat pasien dirawat"
-                className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
-              />
-              <input
-                type="text"
-                value={form.targetHospitalAddress}
-                onChange={(e) => setForm({ ...form, targetHospitalAddress: e.target.value })}
-                placeholder="Alamat RS (opsional)"
-                className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
-              />
-            </div>
+            <select
+              required
+              value={useManualHospital ? "__manual__" : form.targetHospitalName}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__manual__") {
+                  setUseManualHospital(true);
+                  setForm((f) => ({ ...f, targetHospitalName: "", targetHospitalAddress: "" }));
+                } else {
+                  const h = HOSPITALS.find((x) => x.name === v);
+                  setUseManualHospital(false);
+                  setForm((f) => ({ ...f, targetHospitalName: h?.name ?? "", targetHospitalAddress: h?.address ?? "" }));
+                }
+              }}
+              className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+            >
+              <option value="" disabled>— Pilih Rumah Sakit —</option>
+              {Object.entries(HOSPITALS_BY_CITY).map(([city, list]) => (
+                <optgroup key={city} label={city}>
+                  {list.map((h) => <option key={h.name} value={h.name}>{h.name}</option>)}
+                </optgroup>
+              ))}
+              <option value="__manual__">Lainnya (isi manual)…</option>
+            </select>
+
+            {useManualHospital ? (
+              <div className="grid md:grid-cols-2 gap-2">
+                <input
+                  type="text" required
+                  value={form.targetHospitalName}
+                  onChange={(e) => setForm({ ...form, targetHospitalName: e.target.value })}
+                  placeholder="Nama RS tempat pasien dirawat"
+                  className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                />
+                <input
+                  type="text"
+                  value={form.targetHospitalAddress}
+                  onChange={(e) => setForm({ ...form, targetHospitalAddress: e.target.value })}
+                  placeholder="Alamat RS"
+                  className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                />
+              </div>
+            ) : form.targetHospitalAddress ? (
+              <p className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">📍 {form.targetHospitalAddress}</p>
+            ) : null}
+
             <p className="text-[10px] text-blue-700">PMI akan mengantar darah ke alamat ini setelah accept request.</p>
           </div>
 

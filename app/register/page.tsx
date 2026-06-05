@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, setToken, dashboardPath } from "../lib/api";
@@ -20,12 +20,22 @@ export default function RegisterPage() {
     email: "", password: "", name: "", phoneNum: "",
     province: "", city: "", zone: "", address: "",
     birthDate: "",
+    gender: "",
     bloodType: "O", rhesusType: "POSITIVE",
   });
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
+
+  // Preset role dari query (?role=PENDONOR / ?role=PASIEN) → langsung lompat ke step 2.
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("role");
+    if (r === "PENDONOR" || r === "PASIEN") {
+      setForm((f) => ({ ...f, role: r }));
+      setStep(2);
+    }
+  }, []);
 
   // Hitung umur (tahun penuh) dari string tanggal lahir.
   function calcAge(dateStr: string): number {
@@ -57,10 +67,16 @@ export default function RegisterPage() {
         return;
       }
     }
+    if (!form.gender) {
+      setError("Jenis kelamin wajib diisi.");
+      return;
+    }
 
     setLoading(true);
 
-    const res = await api("/auth/register", { method: "POST", body: JSON.stringify(form) });
+    // gender kosong (pasien) → kirim undefined agar tidak melanggar enum di backend.
+    const body = { ...form, gender: form.gender || undefined };
+    const res = await api("/auth/register", { method: "POST", body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) {
       setError(typeof data.error === "string" ? data.error : "Registrasi gagal — cek isian Anda");
@@ -218,6 +234,20 @@ export default function RegisterPage() {
                 className={inputCls}
               />
             </div>
+
+            {/* Jenis kelamin — wajib untuk semua akun personal (Pendonor & Pasien) */}
+            {(form.role === "PENDONOR" || form.role === "PASIEN") && (
+              <div>
+                <h3 className="font-semibold text-slate-900 mb-3">⚧ Jenis Kelamin</h3>
+                <p className="text-xs text-slate-500 mb-2">{form.role === "PENDONOR" ? "Skrining kesehatan berbeda untuk pria & wanita (mis. kehamilan & menstruasi)." : "Lengkapi data diri Anda."}</p>
+                <FormSelect
+                  label="Jenis Kelamin"
+                  value={form.gender}
+                  onChange={(v) => update("gender", v)}
+                  options={[["", "— Pilih —"], ["MALE", "Pria"], ["FEMALE", "Wanita"]]}
+                />
+              </div>
+            )}
 
             {/* Role-specific */}
             {form.role === "PENDONOR" && (
