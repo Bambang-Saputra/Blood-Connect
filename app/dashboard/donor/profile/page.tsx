@@ -5,7 +5,7 @@ import { api } from "../../../lib/api";
 import { toast } from "../../../lib/toast";
 import { useRequireRole } from "../../../lib/useRequireRole";
 import { ProfileForm } from "../../../lib/ProfileForm";
-import { Card, Icons, Button, Badge } from "../../../lib/ui";
+import { Card, Icons, Button } from "../../../lib/ui";
 
 /**
  * Profile page khusus PENDONOR.
@@ -59,6 +59,15 @@ export default function DonorProfilePage() {
     );
   }
 
+  // Status skrining — DISELARASKAN dengan banner dashboard (app/dashboard/donor/page.tsx).
+  // isEligible (cek fisik ≤24 jam) sengaja TIDAK dipakai sebagai status utama
+  // karena bersifat sesaat; status di sini berbasis skrining + masa tunggu medis.
+  const lastScr = donor?.screenings?.[0];
+  const scrExpired = lastScr?.validUntil ? new Date(lastScr.validUntil) < new Date() : false;
+  const hasScr = !!lastScr && !scrExpired;
+  const scrPassed = hasScr && lastScr?.passed === true;
+  const cooldownActive = donor?.cooldownUntil ? new Date(donor.cooldownUntil) > new Date() : false;
+
   const extra = donor && (
     <Card title="Info Donor" icon={<Icons.Drop />} variant="highlight">
       <div className="space-y-3">
@@ -71,11 +80,15 @@ export default function DonorProfilePage() {
           <InfoItem label="Total Donasi">
             <span className="text-2xl font-bold text-slate-900">{donor.totalDonations ?? 0}</span>
           </InfoItem>
-          <InfoItem label="Status Kelayakan">
-            {donor.isEligible ? (
-              <Badge status="VERIFIED" />
+          <InfoItem label="Status Skrining">
+            {cooldownActive ? (
+              <span className="text-xs text-amber-700 font-semibold">⏳ Masa tunggu donor</span>
+            ) : scrPassed ? (
+              <span className="text-xs text-emerald-700 font-semibold">✓ Lolos skrining</span>
+            ) : hasScr ? (
+              <span className="text-xs text-amber-700 font-semibold">⏳ Belum lolos skrining</span>
             ) : (
-              <span className="text-xs text-amber-700 font-semibold">⚠️ Belum eligible</span>
+              <span className="text-xs text-slate-500 font-semibold">— Belum skrining</span>
             )}
           </InfoItem>
           <InfoItem label="Donor Terakhir">

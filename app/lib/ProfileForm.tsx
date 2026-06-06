@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, dashboardPath } from "./api";
 import { toast } from "./toast";
 import { RegionPicker } from "./RegionPicker";
+import { confirmDialog } from "./confirmDialog";
 import { Button, Card, Badge, Icons } from "./ui";
 
 /**
@@ -140,7 +141,6 @@ export function ProfileForm({ role, extraSection, backTo, backLabel }: ProfileFo
                 {me.pendonor && role === "PENDONOR" && (
                   <span className="bg-red-900/40 border border-red-300/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                     🩸 {me.pendonor.bloodType}{me.pendonor.rhesusType === "POSITIVE" ? "+" : "-"}
-                    {me.pendonor.isEligible ? " · Eligible" : " · Belum eligible"}
                   </span>
                 )}
                 {me.pmi && role === "PMI" && (
@@ -263,8 +263,8 @@ function EnableModeSection({ me, onChanged }: { me: Me; onChanged: () => void })
       toast.error("Isi tanggal lahir dulu di form di bawah, lalu simpan profil");
       return;
     }
-    if (mode === "PENDONOR" && !confirm("Aktifkan mode Pendonor? Anda akan bisa donor darah dengan akun ini.")) return;
-    if (mode === "PASIEN" && !confirm("Aktifkan mode Pasien? Anda akan bisa request darah dengan akun ini.")) return;
+    if (mode === "PENDONOR" && !(await confirmDialog({ title: "Aktifkan Mode Pendonor", message: "Anda akan bisa donor darah dengan akun ini.", confirmText: "Ya, Aktifkan", variant: "success" }))) return;
+    if (mode === "PASIEN" && !(await confirmDialog({ title: "Aktifkan Mode Pasien", message: "Anda akan bisa request darah dengan akun ini.", confirmText: "Ya, Aktifkan", variant: "success" }))) return;
 
     setEnabling(mode);
     const res = await api("/auth/me/enable-mode", {

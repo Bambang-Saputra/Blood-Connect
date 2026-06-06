@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
+import { confirmDialog } from "../../lib/confirmDialog";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 
@@ -96,7 +97,7 @@ export default function DonorDashboard() {
 
   // Fungsi untuk membatalkan jadwal (Butuh update di backend nanti)
   async function cancelSchedule(scheduleId: string) {
-    if (!confirm("Apakah Anda yakin ingin membatalkan jadwal donor ini?")) return;
+    if (!(await confirmDialog({ title: "Batalkan Jadwal Donor", message: "Yakin ingin membatalkan jadwal donor ini?", confirmText: "Ya, Batalkan", variant: "danger" }))) return;
     
     // CATATAN: Endpoint DELETE ini harus kita buat nanti di file donorController.ts
     const res = await api(`/donor/schedules/${scheduleId}`, { method: "DELETE" });
@@ -123,7 +124,38 @@ export default function DonorDashboard() {
     : false;
   const hasScreening = !!lastScreening && !screeningExpired; // expired = anggap belum isi
   const hasPassedScreening = hasScreening && lastScreening?.passed === true;
-  const isCooldown = hasScreening && !hasPassedScreening; // udah ngisi (masih berlaku), TAPI nggak lulus
+  const screeningFailed = hasScreening && !hasPassedScreening; // udah ngisi (masih berlaku), TAPI nggak lulus
+
+  // Masa tunggu MEDIS pasca-donor (cooldownUntil di masa depan).
+  // Ini KONSEP BERBEDA dari skrining: walau skrining lolos, donor yang baru
+  // saja mendonor tetap harus menunggu sebelum bisa donor lagi.
+  const cooldownActive = me.cooldownUntil ? new Date(me.cooldownUntil) > new Date() : false;
+  const cooldownUntilStr = me.cooldownUntil
+    ? new Date(me.cooldownUntil).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
+  // "Siap daftar jadwal" = lolos skrining DAN tidak sedang masa tunggu medis.
+  // (Cek fisik final tetap dilakukan PMI di hari donor — itu beda dari isEligible.)
+  const readyToSchedule = hasPassedScreening && !cooldownActive;
+  // Banner amber kalau skrining gagal ATAU sedang masa tunggu medis.
+  const isWaiting = screeningFailed || cooldownActive;
+
+  // Alasan kenapa belum bisa daftar jadwal (null = boleh daftar).
+  const scheduleBlockReason = !hasScreening
+    ? "Isi kuesioner skrining kesehatan dulu sebelum daftar jadwal ya!"
+    : screeningFailed
+    ? "Skrining terakhir Anda belum lolos, jadi belum bisa daftar jadwal saat ini."
+    : cooldownActive
+    ? `Anda masih dalam masa tunggu pasca-donor${cooldownUntilStr ? ` sampai ${cooldownUntilStr}` : ""}.`
+    : null;
+
+  // Kunjungan terakhir yang SUDAH ada hasilnya (selesai/ditolak) & masih "baru" (≤14 hari).
+  // Tujuannya kasih feedback hasil cek fisik PMI ke donor — terutama jadwal REJECTED
+  // (cek fisik gagal) yang selama ini tidak muncul sama sekali di dashboard donor.
+  const RECENT_VISIT_DAYS = 14;
+  const lastVisit = mySchedules.find((s) => s.status === "COMPLETED" || s.status === "REJECTED");
+  const lastVisitRecent =
+    !!lastVisit && Date.now() - new Date(lastVisit.jadwal).getTime() < RECENT_VISIT_DAYS * 86400000;
 
   return (
     /* INI KANVAS BACKGROUND-NYA (Tag DIV baru) */
@@ -194,11 +226,11 @@ export default function DonorDashboard() {
         <section className="relative overflow-hidden rounded-3xl shadow-sm">
           <div className={`absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]`}></div>
           
-          {/* Pewarnaan Background Berdasarkan 3 State */}
+          {/* Pewarnaan Background Berdasarkan State */}
           <div className={`relative p-8 flex flex-col md:flex-row items-center justify-between gap-6 transition-all ${
-            hasPassedScreening 
-              ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white" 
-              : isCooldown
+            readyToSchedule
+              ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+              : isWaiting
               ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white"
               : "bg-gradient-to-r from-slate-800 to-slate-900 text-white"
           }`}>
@@ -212,19 +244,22 @@ export default function DonorDashboard() {
                 </span>
               </div>
               
-              {/* Judul Banner Berdasarkan 3 State */}
+              {/* Judul Banner Berdasarkan State */}
               <h2 className="text-2xl font-bold mb-2">
-                {hasPassedScreening ? "Mantap! Anda Layak Donor 🎉" 
-                  : isCooldown ? "Anda Sedang Dalam Masa Tunggu ⏳" 
+                {readyToSchedule ? "Lolos Skrining — Siap Daftar Jadwal! 🎉"
+                  : cooldownActive ? "Masa Tunggu Pasca-Donor ⏳"
+                  : screeningFailed ? "Skrining Belum Lolos ⏳"
                   : "Kuesioner Skrining Belum Lengkap"}
               </h2>
-              
+
               {/* Deskripsi Banner */}
               <p className="text-sm opacity-90 max-w-xl">
-                {hasPassedScreening 
-                  ? "Anda telah lolos skrining awal. Silakan pilih PMI terdekat di bawah ini untuk mendaftarkan jadwal donor darah Anda."
-                  : isCooldown 
-                  ? (me.eligibilityReason || "Berdasarkan kondisi kesehatan, Anda harus menunggu beberapa saat sebelum bisa mendonorkan darah kembali.")
+                {readyToSchedule
+                  ? "Anda telah lolos skrining awal. Silakan pilih PMI terdekat di bawah untuk mendaftar jadwal. Cek fisik final (HB, tensi, dll) tetap dilakukan PMI di hari donor."
+                  : cooldownActive
+                  ? (me.eligibilityReason || `Anda baru saja mendonorkan darah. Demi keselamatan, Anda dapat donor kembali${cooldownUntilStr ? ` mulai ${cooldownUntilStr}` : " setelah masa tunggu selesai"}.`)
+                  : screeningFailed
+                  ? (me.eligibilityReason || "Berdasarkan hasil skrining, Anda perlu menunggu sebelum bisa mendonorkan darah. Silakan isi skrining ulang setelah kondisi Anda membaik.")
                   : "Sebelum mendaftar jadwal donor, Anda diwajibkan untuk mengisi 8 pertanyaan kesehatan standar PMI untuk memastikan kelayakan awal."}
               </p>
             </div>
@@ -240,6 +275,37 @@ export default function DonorDashboard() {
           </div>
         </section>
 
+        {/* STATUS KUNJUNGAN TERAKHIR — feedback hasil cek fisik PMI ke donor */}
+        {lastVisitRecent && (
+          <section className={`rounded-3xl p-6 border-2 flex items-start gap-4 ${
+            lastVisit.status === "COMPLETED"
+              ? "bg-emerald-50 border-emerald-200"
+              : "bg-amber-50 border-amber-200"
+          }`}>
+            <div className="text-3xl shrink-0">{lastVisit.status === "COMPLETED" ? "✅" : "⚠️"}</div>
+            <div className="flex-1">
+              <h3 className={`font-bold text-lg ${lastVisit.status === "COMPLETED" ? "text-emerald-800" : "text-amber-800"}`}>
+                {lastVisit.status === "COMPLETED" ? "Donor Berhasil — Terima Kasih! 🩸" : "Cek Fisik Belum Lolos"}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+                {lastVisit.status === "COMPLETED" ? (
+                  <>
+                    Kunjungan <strong>{new Date(lastVisit.jadwal).toLocaleDateString("id-ID", { dateStyle: "long" })}</strong> di{" "}
+                    <strong>{lastVisit.pmi?.pmiName}</strong> berhasil. Detailnya tercatat di Riwayat Donor di bawah.
+                    {cooldownUntilStr ? <> Anda boleh donor lagi mulai <strong>{cooldownUntilStr}</strong>.</> : null}
+                  </>
+                ) : (
+                  <>
+                    Pada kunjungan <strong>{new Date(lastVisit.jadwal).toLocaleDateString("id-ID", { dateStyle: "long" })}</strong> di{" "}
+                    <strong>{lastVisit.pmi?.pmiName}</strong>, kondisi Anda belum memenuhi syarat cek fisik. Jaga kondisi & istirahat
+                    cukup, lalu isi skrining ulang untuk mendaftar kembali.
+                  </>
+                )}
+              </p>
+            </div>
+          </section>
+        )}
+
       {/* CONDITIONAL RENDERING: PENGINGAT JADWAL ATAU LIST PMI */}
       {activeSchedule ? (
         
@@ -250,13 +316,21 @@ export default function DonorDashboard() {
           <div className="relative z-10 flex flex-col lg:flex-row gap-8">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-4">
-                <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
-                  Jadwal Aktif
-                </span>
+                {activeSchedule.status === "CONFIRMED" ? (
+                  <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full">
+                    ✓ Dikonfirmasi PMI
+                  </span>
+                ) : (
+                  <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+                    ⏳ Menunggu Konfirmasi PMI
+                  </span>
+                )}
               </div>
               <h3 className="text-3xl font-black text-slate-900 mb-2">Siap Donor Darah! 🩸</h3>
               <p className="text-slate-500 mb-8 max-w-md">
-                Keren! Anda sudah terdaftar. Pastikan istirahat cukup, banyak minum air putih, dan bawa KTP saat datang ke lokasi ya.
+                {activeSchedule.status === "CONFIRMED"
+                  ? "PMI sudah mengonfirmasi jadwalmu. Pastikan istirahat cukup, banyak minum air putih, dan bawa KTP saat datang ke lokasi ya."
+                  : "Jadwalmu sedang menunggu konfirmasi PMI. Sambil menunggu, jaga kondisi: istirahat cukup, banyak minum air putih, dan siapkan KTP-mu ya."}
               </p>
 
               <div className="space-y-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
@@ -285,9 +359,9 @@ export default function DonorDashboard() {
                 <Button variant="secondary" className="text-rose-600 hover:bg-rose-50 border-rose-200" onClick={() => cancelSchedule(activeSchedule.id)}>
                   Batalkan Jadwal
                 </Button>
-                <Button variant="primary" onClick={() => {
-                  // Simulasi ganti lokasi: Batalkan jadwal diam-diam, lalu buka list PMI lagi
-                  if(confirm("Untuk mengganti lokasi, jadwal saat ini akan dibatalkan terlebih dahulu. Lanjutkan?")) {
+                <Button variant="primary" onClick={async () => {
+                  // Ganti lokasi: batalkan jadwal dulu, lalu daftar PMI muncul lagi
+                  if (await confirmDialog({ title: "Ganti Lokasi / Reschedule", message: "Jadwal saat ini akan dibatalkan dulu agar Anda bisa memilih lokasi/jadwal baru. Lanjutkan?", confirmText: "Ya, Lanjutkan" })) {
                     cancelSchedule(activeSchedule.id);
                   }
                 }}>
@@ -378,8 +452,8 @@ export default function DonorDashboard() {
                         Info Detail
                       </Button>
                       <Button variant="primary" size="sm" className="flex-1 text-xs shadow-md shadow-rose-500/20" onClick={() => {
-                        if (!hasPassedScreening) {
-                          toast.error("Silakan selesaikan Kuesioner Skrining dulu ya!");
+                        if (scheduleBlockReason) {
+                          toast.error(scheduleBlockReason);
                           return;
                         }
                         setScheduleForm({ ...scheduleForm, pmiId: p.id, pmiName: p.pmiName });
@@ -425,8 +499,8 @@ export default function DonorDashboard() {
                   )}
 
                   <Button size="sm" className="w-full" onClick={() => {
-                    if (!hasPassedScreening) {
-                      toast.error("Isi kuesioner skrining terlebih dahulu!");
+                    if (scheduleBlockReason) {
+                      toast.error(scheduleBlockReason);
                       return;
                     }
                     setScheduleForm({ ...scheduleForm, pmiId: b.pmi.id, pmiName: b.pmi.pmiName });
@@ -511,8 +585,8 @@ export default function DonorDashboard() {
               <div className="flex gap-3">
                 <Button variant="secondary" className="flex-1" onClick={() => setSelectedPmiInfo(null)}>Tutup</Button>
                 <Button variant="primary" className="flex-1" onClick={() => {
-                  if (!hasPassedScreening) {
-                    toast.error("Selesaikan skrining dulu ya!");
+                  if (scheduleBlockReason) {
+                    toast.error(scheduleBlockReason);
                     return;
                   }
                   setSelectedPmiInfo(null);
