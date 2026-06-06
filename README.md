@@ -41,7 +41,7 @@ Model sistem ini mengikuti alur donor darah Indonesia yang sebenarnya, di mana *
 |------|-----------|----------------------|
 | 💉 **PENDONOR** | `/dashboard/donor` | Isi skrining, daftar jadwal donor di PMI, lihat broadcast PMI, volunteer ke request pasien |
 | 🩺 **PASIEN** | `/dashboard/patient` | Ajukan permintaan darah (broadcast ke semua PMI), pantau status |
-| 🏛️ **PMI / UTD** | `/dashboard/pmi` | Kelola stok, accept & fulfill request pasien, cek fisik donor, broadcast minta stok |
+| 🏛️ **PMI / UTD** | `/dashboard/pmi` | Kelola stok, accept & fulfill request pasien, cek fisik + selesaikan donasi (catat kantong), broadcast minta stok |
 | 🛡️ **ADMIN** | `/dashboard/admin` | Verifikasi/suspend PMI, monitor jadwal & request nasional |
 
 > Satu email bisa punya **2 mode personal** (Pendonor + Pasien) lewat *mode switcher*. PMI & Admin adalah role institusional/sistem yang terpisah.
@@ -53,23 +53,32 @@ Model sistem ini mengikuti alur donor darah Indonesia yang sebenarnya, di mana *
 ### A. Alur Donor Menyumbang Darah
 
 ```
-1. REGISTER (/register)              → Pendonor isi data + tanggal lahir (validasi usia ≥17)
-        │
+1. REGISTER (/register)              → Isi data + tanggal lahir (validasi usia 17–65)
+        │                              + jenis kelamin (WAJIB, terkunci setelah daftar).
         ▼
 2. ISI SKRINING (/dashboard/donor/screening)
-        │                              8 pertanyaan kesehatan standar PMI.
-        │                              (demam? operasi <6bln? hamil? HIV/Hep? dll)
+        │                              8 pertanyaan kesehatan standar PMI (demam? operasi
+        │                              <6bln? hamil/menyusui? HIV/Hep? dll). Pendonor WANITA
+        │                              dapat pertanyaan tambahan: sedang menstruasi?
+        │                              GAGAL → masuk masa tunggu (cooldown) sesuai sebab.
         ▼
 3. DAFTAR JADWAL DONOR                → Pilih PMI (diurutkan jarak terdekat) + tanggal + sesi.
-   (dashboard donor → "Daftar Jadwal")  Wajib sudah isi skrining dulu.
-        │                              Donor BOLEH daftar di beberapa PMI sekaligus.
+   (dashboard donor → "Daftar Jadwal")  Syarat: skrining LOLOS, belum kadaluarsa (7 hari),
+        │                              dan TIDAK sedang masa tunggu. Boleh daftar di
+        │                              beberapa PMI sekaligus.
         ▼
 4. CEK FISIK DI PMI (saat hari-H)     → Petugas PMI input Hb, tensi, suhu, nadi, berat.
    (PMI: panel "Jadwal Donor")          Sistem auto-hitung kelayakan:
         │                                eligible = lolosCekFisik AND lolosSkrining
         ▼
-5. PMI CONFIRM / DONASI SELESAI       → Status jadwal: CONFIRMED / COMPLETED.
+5. SELESAIKAN DONASI (PMI)           → PMI input jumlah kantong (bagCount) → stok PMI
+   (status: CONFIRMED → COMPLETED)      bertambah otomatis, masuk Riwayat Donor donor,
+                                        dan MASA TUNGGU PASCA-DONOR 60 hari dimulai.
 ```
+
+> **Skrining vs Eligibility — dua konsep berbeda (penting):**
+> - **Lolos skrining** (kuesioner mandiri) = izin untuk *mendaftar jadwal*. Banner donor hijau "Lolos Skrining — Siap Daftar Jadwal".
+> - **`isEligible`** (medis) baru `true` setelah **cek fisik PMI** lolos, dan bersifat sesaat (dipakai MatchSystem). Profil donor menampilkan **"Status Skrining"** (skrining + cooldown), bukan flag `isEligible` mentah, supaya tidak membingungkan.
 
 **Aturan lolos cek fisik (di PMI):**
 | Parameter | Rentang Lolos |
@@ -80,6 +89,18 @@ Model sistem ini mengikuti alur donor darah Indonesia yang sebenarnya, di mana *
 | Suhu tubuh | 36.5 – 37.5 °C |
 | Denyut nadi | 50 – 100 bpm |
 | Berat badan | ≥ 45 kg |
+
+**Masa Tunggu (Cooldown)** — `pendonor.cooldownUntil`. Selama aktif, donor **tidak bisa isi skrining baru** (403) **maupun daftar jadwal** (400).
+
+| Pemicu | Lama tunggu |
+|--------|-------------|
+| ✅ **Selesai donor** (pasca-donor) | **60 hari** |
+| Demam | 7 hari |
+| Konsumsi obat / vaksinasi | 14 hari |
+| Sedang menstruasi (wanita) | 5 hari |
+| Operasi besar / tato / tindik | 180 hari |
+| Hamil / menyusui | 270 hari |
+| HIV/Hepatitis / perilaku berisiko | Permanen |
 
 ### B. Alur Permintaan Darah Pasien
 
@@ -92,12 +113,18 @@ Model sistem ini mengikuti alur donor darah Indonesia yang sebenarnya, di mana *
 2. PMI ACCEPT                        → PMI pertama yang klik [Accept] meng-claim request.
    (/dashboard/pmi → panel request)    reqStatus = PROCESSING, acceptedByPmiId = PMI itu.
         │                              PMI lain tidak bisa claim lagi (anti double-claim).
+        │                              Pasien kini lihat KONTAK PMI (nama, lokasi, telp, email).
         ▼
-3. PMI FULFILL                       → PMI klik [Fulfill]. BARU di sini stok dipotong
+3. (opsional) IN_TRANSIT             → PMI tandai darah sedang dikirim ke RS tujuan.
+        │                              Transisi divalidasi (mis. FULFILLED tidak bisa mundur).
+        ▼
+4. PMI FULFILL                       → PMI klik [Fulfill]. BARU di sini stok dipotong
         │                              (FEFO — First Expiry First Out, dari stok PMI itu).
         │                              Kalau stok kurang → ditolak + saran broadcast stok.
         ▼  reqStatus = FULFILLED
 ```
+
+> Setiap perubahan status mengirim **notifikasi otomatis ke pasien** (`REQUEST_STATUS_UPDATE`: diproses / dikirim / terpenuhi) — tanpa refresh manual.
 
 **Urgency dihitung server-side** dari total stok AVAILABLE (semua PMI VERIFIED) untuk golongan terkait:
 
@@ -148,7 +175,7 @@ Model sistem ini mengikuti alur donor darah Indonesia yang sebenarnya, di mana *
 ```
 blood-connect/
 ├── prisma/
-│   ├── schema.prisma                  # ⭐ 15 model + 11 enum
+│   ├── schema.prisma                  # ⭐ 15 model + 12 enum (incl. Gender)
 │   └── migrations/                    # init_pmi → broadcast → drop_screening_unique
 ├── src/                               # Backend API (Express)
 │   ├── server.ts                      # Entry point + CORS + cron
@@ -166,7 +193,7 @@ blood-connect/
 │   │   ├── medicalController.ts       # Cek fisik + skrining
 │   │   ├── adminController.ts         # Verifikasi PMI + monitor
 │   │   └── notificationController.ts  # Inbox in-app
-│   ├── routes/index.ts
+│   ├── routes/index.ts                # ⭐ + pelindung async global (anti-crash saat DB blip)
 │   ├── middleware/auth.ts             # JWT + requireRole
 │   ├── jobs/stockExpiryJob.ts         # Cron: set EXPIRED stok kadaluarsa
 │   └── services/                      # ⚠️ LEGACY (lihat Known Limitations)
@@ -180,6 +207,7 @@ blood-connect/
     │   ├── useRequireRole.ts          # ⭐ Client-side role guard (defense-in-depth)
     │   ├── ProfileForm.tsx            # Shared form profil per-role
     │   ├── RegionPicker.tsx           # Cascading Provinsi → Kota
+    │   ├── confirmDialog.ts           # ⭐ Dialog konfirmasi ber-styling (ganti window.confirm)
     │   ├── regions.ts ui.tsx toast.ts ModeSwitcher.tsx NotificationBell.tsx
     └── dashboard/
         ├── donor/    page.tsx + profile/ + screening/
@@ -213,7 +241,9 @@ JWT_SECRET="string-acak-bebas-untuk-dev"
 ```powershell
 npx prisma generate
 npx prisma db push          # sync schema ke DB (paling reliable untuk demo)
-npm run seed                # isi akun & data dummy
+npm run seed                # akun dasar + sedikit data (cocok untuk testing/audit)
+# ATAU — data kaya "seolah app sudah lama berjalan":
+npm run seed:dummy          # 11 PMI, puluhan pasien, ratusan jadwal/riwayat/permintaan
 ```
 > Alternatif: `npx prisma migrate deploy` (pakai migration history). Untuk demo, `db push` paling aman.
 > ⚠️ Kalau muncul `EPERM rename query_engine`, stop dulu semua proses node yang jalan, lalu ulangi.
@@ -244,7 +274,7 @@ Setelah `npm run seed`:
 | 🩺 **Pasien 1** | `pasien1@test.com` | `password123` | Siap request darah |
 | 🩺 **Pasien 2** | `pasien2@test.com` | `password123` | Siap request darah |
 
-> 💡 Tombol auto-fill di `/login` hanya menampilkan **Pendonor + Pasien**. Untuk **Admin / PMI**, ketik email + password manual. Registrasi PMI lewat halaman terpisah: **`/pmiregister`**.
+> 💡 Login: ketik email + password manual untuk semua role (tombol akun-demo auto-fill sudah dihapus). Registrasi Pendonor/Pasien di **`/register`**, registrasi PMI di halaman terpisah **`/pmiregister`**.
 
 ### 🎬 Demo Flow Lengkap (Recommended untuk Presentasi)
 
@@ -258,14 +288,17 @@ Setelah `npm run seed`:
 
 === BAGIAN 2: PMI Broadcast → Donor Daftar ===
 4. (masih PMI Jakarta) klik [📢 Broadcast Stok] → minta O+ 10 kantong
-   → semua donor O+/O−/A−/B− dst di Jakarta dapat notifikasi
+   → semua donor yang bisa mendonor ke O+ (yaitu O+ & O−) di Jakarta dapat notifikasi
 5. Login donor1@test.com → panel atas "Permintaan Stok dari PMI" → "Daftar Donor di Sini"
    → form jadwal auto-isi PMI Jakarta → pilih tanggal → submit
 
-=== BAGIAN 3: PMI Cek Fisik → Eligibility ===
+=== BAGIAN 3: PMI Cek Fisik → Selesaikan Donasi ===
 6. Login pmi.jakarta@test.com → panel "Jadwal Donor di PMI Anda" → expand donor1
    → "Resume Skrining" (lihat jawaban) + "Input Cek Fisik" (Hb 14, tensi 120/80, dst)
    → sistem auto-hitung: LAYAK / TIDAK LAYAK → [Confirm]
+6b. Jika LAYAK → [Selesaikan Donasi] → input jumlah kantong (bagCount)
+   → stok PMI bertambah otomatis, Riwayat Donor terisi (+jumlah kantong),
+     donor masuk masa tunggu 60 hari (banner donor jadi "Masa Tunggu Pasca-Donor").
 
 === BAGIAN 4: Admin Verifikasi PMI ===
 7. Login admin@bloodconnect.id → /dashboard/admin → "Verifikasi PMI Baru"
@@ -295,14 +328,14 @@ Setelah `npm run seed`:
 | POST | `/api/requests` | **Pasien** | Buat request → broadcast (PENDING). Stok belum dipotong |
 | GET | `/api/requests/:id` | owner/PMI/admin | Detail 1 request |
 | POST | `/api/requests/:id/accept` | **PMI** | Claim request PENDING → PROCESSING |
-| PATCH | `/api/requests/:id/status` | PMI(claim)/Admin | FULFILLED memotong stok (FEFO, atomic) |
+| PATCH | `/api/requests/:id/status` | PMI(claim)/Admin | PROCESSING→(IN_TRANSIT)→FULFILLED; FULFILLED memotong stok (FEFO, atomic) |
 
 ### Pendonor
 | Method | Path | Keterangan |
 |--------|------|------------|
 | GET | `/api/donor/me` | Profil + status eligibility |
 | PATCH | `/api/donor/me/preferred-pmi` | Set PMI preferensi (untuk broadcast) |
-| POST | `/api/donor/schedules` | Daftar jadwal donor (wajib sudah skrining) |
+| POST | `/api/donor/schedules` | Daftar jadwal (wajib skrining lolos & **tidak sedang cooldown**) |
 | GET | `/api/donor/schedules` | Jadwal milik sendiri |
 | GET | `/api/donor/history` | Riwayat donasi |
 | GET | `/api/donor/notifications` | Undangan match (MatchSystem lama) |
@@ -318,6 +351,7 @@ Setelah `npm run seed`:
 | GET | `/api/pmi/list` | List PMI VERIFIED (untuk donor pilih) — semua role |
 | GET | `/api/pmi/schedules` | Jadwal donor **scoped ke PMI ini** (bukan broadcast) |
 | POST | `/api/pmi/schedules/:id/checkup` | Input cek fisik → auto-hitung eligibility |
+| POST | `/api/pmi/schedules/:id/complete` | Selesaikan donasi (bagCount) → stok + Riwayat + cooldown 60 hari |
 | PATCH | `/api/pmi/schedules/:id/status` | Confirm/Reject/Complete jadwal |
 | POST | `/api/pmi/broadcasts` | Broadcast minta stok ke donor sekota |
 | GET | `/api/pmi/broadcasts` | List broadcast milik PMI ini |
@@ -336,7 +370,7 @@ Setelah `npm run seed`:
 |--------|------|------|
 | GET | `/api/medical/donor-lookup` | Admin/PMI (cari donor by email) |
 | POST | `/api/medical/checkup` | Admin/PMI (cek fisik standalone) |
-| POST | `/api/medical/screening` | Pendonor (isi kuesioner) |
+| POST | `/api/medical/screening` | Pendonor (kuesioner; wanita +pertanyaan menstruasi) |
 | GET | `/api/medical/me` | Pendonor (riwayat) |
 
 ### Admin
@@ -393,29 +427,44 @@ Sesuai praktik nyata: "volunteer" = **menyatakan kesediaan**, bukan jaminan laya
 ### 6. Stock Expiry Cron
 **File:** `src/jobs/stockExpiryJob.ts` — jadwal `5 0 * * *` (tiap hari 00:05): set EXPIRED untuk stok lewat tanggal + notifikasi early-warning (<3 hari) ke PMI terkait.
 
+### 7. Masa Tunggu (Cooldown) — Anti Donor Terlalu Sering
+**File:** `medicalController.ts` (`submitScreening`) + `pmiController.ts` (`completeDonation`) + `donorController.ts` (`createSchedule`)
+
+`pendonor.cooldownUntil` di-set saat **(a)** selesai donor → +60 hari, atau **(b)** skrining gagal → durasi sesuai sebab (5–270 hari / permanen). Selama aktif: tidak bisa isi skrining baru (403) maupun daftar jadwal (400). Banner dashboard donor membedakan **"Lolos Skrining"** (boleh daftar) vs **"Masa Tunggu Pasca-Donor"** (tunggu dulu) — tidak lagi keliru menampilkan "Layak Donor" saat cooldown.
+
+### 8. Skrining Per-Gender
+**File:** `medicalController.ts` (`submitScreening`)
+
+`User.gender` wajib saat register & **terkunci** (atribut biologis, tidak bisa diedit di profil). Pendonor **wanita** mendapat pertanyaan tambahan **menstruasi** (`isMenstruating` → tangguh 5 hari) selain kehamilan/menyusui.
+
+### 9. Pelindung Async Global — Server Tahan Banting
+**File:** `src/routes/index.ts`
+
+Semua route handler dibungkus `Promise.resolve(h()).catch(next)`. Error async tak tertangkap (mis. koneksi DB Neon putus / cold-start — `P1001`/`P2028`) dibalas **HTTP 500** ke client, **bukan meng-crash seluruh proses** Express. Tanpa dependency tambahan; happy-path tidak terpengaruh.
+
 ---
 
 ## 🗃️ Skema Database (15 model)
 
 | Model | Tujuan |
 |-------|--------|
-| `User` | Base — email, password, **birthDate** (validasi usia), city/province/zone |
-| `Pendonor` | bloodType, weight, **isEligible** (cache), preferredPmiId |
+| `User` | Base — email, password, **birthDate** (validasi usia 17–65), **gender** (terkunci), city/province/zone |
+| `Pendonor` | bloodType, weight, **isEligible** (cache), **cooldownUntil**, **totalDonations**, **lastDonationDate**, preferredPmiId |
 | `Pasien` | NIK opsional |
 | `PMI` | Pusat blood bank — pmiName/Code/Loc, **PmiStatus** (UNVERIFIED→VERIFIED→SUSPENDED) |
 | `StokDarah` | Per-batch, milik PMI, **default AVAILABLE** (tanpa quarantine) |
 | `PmiBroadcast` ⭐ | Permintaan stok PMI ke donor sekota — **BroadcastStatus** (OPEN/CLOSED/EXPIRED) |
 | `PemeriksaanDonor` | Vital signs (Hb/BP/suhu/nadi/BB), scoped ke PMI |
-| `ScreeningAnswer` | Kuesioner 8 pertanyaan PMI (diisi donor) |
+| `ScreeningAnswer` | Kuesioner 8 pertanyaan PMI + **isMenstruating** (wanita), `validUntil` (7 hari), `passed` |
 | `PermintaanDonor` | Request darah — **targetHospitalName**, **acceptedByPmiId**, urgency (computed) |
 | `StockAllocation` | Join: 1 request bisa dari multi-batch |
 | `JadwalDonor` | Jadwal donor — **scoped ke PMI**, screeningId, checkupId, **isEligible** per-jadwal |
-| `DonorHistory` | Riwayat donasi selesai |
+| `DonorHistory` | Riwayat donasi selesai — **bagCount** (jumlah kantong), volumeMl, component |
 | `DonorNotification` | Log undangan MatchSystem + respons |
 | `Notification` | Inbox in-app generic |
 | `AuditLog` | Jejak perubahan data sensitif (compliance) |
 
-**Enum:** `Role` (PENDONOR/PASIEN/PMI/ADMIN), `BloodType`, `RhesusType`, `BloodComponent`, `RequestStatus`, `StockStatus`, `ScheduleStatus`, `PmiStatus`, `NotificationType` (incl. `PMI_BROADCAST`), `BroadcastStatus`, `AuditAction`.
+**Enum (12):** `Role` (PENDONOR/PASIEN/PMI/ADMIN), **`Gender`** (MALE/FEMALE), `BloodType`, `RhesusType`, `BloodComponent`, `RequestStatus` (incl. `IN_TRANSIT`), `StockStatus`, `ScheduleStatus`, `PmiStatus`, `NotificationType` (incl. `PMI_BROADCAST`, `REQUEST_STATUS_UPDATE`), `BroadcastStatus`, `AuditAction`.
 
 ---
 
@@ -426,7 +475,7 @@ Hal-hal yang **disadari** dan belum/diputuskan tidak diimplementasikan untuk sco
 | # | Item | Catatan |
 |---|------|---------|
 | Bug #3 | Urutan urgency di "Permintaan Tersedia" donor | `urgency` di-sort alfabetis (string), bukan prioritas. CRITICAL bisa muncul di bawah. |
-| Bug #4c | Interval donasi (≥60 hari) belum di-enforce | Aturan ada di `eligibilityService` (legacy, tak dipakai). Cek fisik PMI belum cek jarak donasi terakhir. |
+| ✅ Bug #4c | Interval donasi 60 hari — **sudah di-enforce** | Lewat cooldown pasca-donor: `completeDonation` set `cooldownUntil` +60 hari → `createSchedule` & `submitScreening` memblokir. Cek interval di `eligibilityService` (legacy) tetap tak dipakai. |
 | Bug #4d | Volunteer belum validasi kompatibilitas | Endpoint terima requestId apa pun (FE sudah filter; via API langsung belum dijaga). |
 | Bug #5 | Dead code | `services/eligibilityService.ts` & `matchSystemService.ts` tidak dipakai di alur aktif (sisa model MatchSystem auto-allocate yang sudah diganti alur PMI-accept). |
 | — | Tab contamination | Token di `localStorage` (di-share antar-tab). Login 2 akun beda di 2 tab bisa saling timpa. `useRequireRole` mengoreksi saat refresh. Untuk demo multi-akun gunakan Incognito/browser berbeda. |
