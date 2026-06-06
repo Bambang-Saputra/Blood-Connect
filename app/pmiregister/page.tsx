@@ -75,9 +75,6 @@ export default function PmiRegisterPage() {
             <BloodDropIcon className="w-9 h-9 text-red-600" />
             <span className="font-bold text-2xl text-slate-900">Blood<span className="text-red-600">Connect</span></span>
           </Link>
-          <div className="inline-block bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mb-3">
-            🏛️ Khusus Institusi
-          </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900">Pendaftaran PMI</h1>
           <p className="text-slate-500 mt-2 max-w-xl mx-auto">
             Form ini khusus untuk PMI/UTD daerah yang ingin terhubung dengan jaringan Blood Connect nasional.
