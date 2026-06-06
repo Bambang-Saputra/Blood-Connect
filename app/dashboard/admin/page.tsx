@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
+import { confirmDialog } from "../../lib/confirmDialog";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons as UIIcons } from "../../lib/ui";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -44,7 +45,7 @@ export default function AdminDashboard() {
   }
 
   async function verifyHospital(id: string, status: "VERIFIED" | "SUSPENDED") {
-    if (!confirm(`Yakin set status PMI ke ${status}?`)) return;
+    if (!(await confirmDialog({ title: "Ubah Status PMI", message: `Set status PMI menjadi ${status}?`, confirmText: "Ya", variant: status === "SUSPENDED" ? "danger" : "success" }))) return;
     const res = await api(`/admin/pmis/${id}/verify`, { method: "PATCH", body: JSON.stringify({ status }) });
     if (res.ok) { toast.success(`Status PMI berhasil diubah menjadi ${status}`); refresh(); }
     else toast.error("Gagal mengubah status PMI");

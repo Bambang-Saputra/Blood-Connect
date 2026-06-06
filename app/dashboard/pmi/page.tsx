@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, clearToken } from "../../lib/api";
 import { useRequireRole } from "../../lib/useRequireRole";
 import { toast } from "../../lib/toast";
+import { confirmDialog } from "../../lib/confirmDialog";
 import { NotificationBell } from "../../lib/NotificationBell";
 import { Button, Card, Badge, EmptyState, Icons } from "../../lib/ui";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -129,7 +130,7 @@ export default function PmiDashboard() {
   }
 
   async function closeBroadcast(id: string) {
-    if (!confirm("Tutup broadcast ini? Donor tidak akan dapat respons lagi.")) return;
+    if (!(await confirmDialog({ title: "Tutup Broadcast", message: "Donor tidak akan dapat merespons broadcast ini lagi.", confirmText: "Tutup", variant: "danger" }))) return;
     const res = await api(`/pmi/broadcasts/${id}/close`, { method: "PATCH" });
     if (res.ok) {
       toast.success("Broadcast ditutup");
@@ -138,7 +139,7 @@ export default function PmiDashboard() {
   }
 
   async function acceptRequest(id: string) {
-    if (!confirm("Accept request ini? PMI Anda yang akan memproses & mengantar darah ke RS tujuan.")) return;
+    if (!(await confirmDialog({ title: "Terima Permintaan Darah", message: "PMI Anda akan memproses & mengantar darah ke RS tujuan pasien.", confirmText: "Ya, Terima", variant: "success" }))) return;
     const res = await api(`/requests/${id}/accept`, { method: "POST" });
     if (res.ok) {
       toast.success("Request berhasil di-accept");
@@ -147,7 +148,7 @@ export default function PmiDashboard() {
   }
 
   async function updateRequestStatus(id: string, newStatus: string) {
-    if (!confirm(`Yakin ubah status ke ${newStatus}?`)) return;
+    if (!(await confirmDialog({ title: "Ubah Status Permintaan", message: `Ubah status permintaan menjadi ${newStatus}?`, confirmText: "Ya, Ubah", variant: newStatus === "REJECTED" ? "danger" : "primary" }))) return;
     const res = await api(`/requests/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ newStatus }),
@@ -572,7 +573,7 @@ function ScheduleRow({ schedule, onChange }: { schedule: Schedule; onChange: () 
   }
 
   async function confirmSchedule(status: "CONFIRMED" | "REJECTED") {
-    if (!confirm(`Yakin set status jadwal ke ${status}?`)) return;
+    if (!(await confirmDialog({ title: "Status Jadwal Donor", message: `Set status jadwal donor menjadi ${status}?`, confirmText: "Ya", variant: status === "REJECTED" ? "danger" : "success" }))) return;
     const res = await api(`/pmi/schedules/${schedule.id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
