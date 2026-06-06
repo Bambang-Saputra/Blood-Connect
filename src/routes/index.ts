@@ -11,6 +11,27 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
 
+// =====================================================================
+// PELINDUNG GLOBAL (async error guard)
+// Bungkus tiap route handler agar error yang TAK tertangkap — mis. koneksi
+// DB Neon putus / cold-start (P1001/P2028) — diteruskan ke error-middleware
+// Express (balas 500) alih-alih meng-crash SELURUH proses backend.
+// Tanpa dependency tambahan; semua route di bawah otomatis terlindungi
+// tanpa perlu diubah satu per satu. Happy-path tidak terpengaruh.
+// =====================================================================
+for (const m of ["get", "post", "patch", "put", "delete"] as const) {
+  const orig = (router[m] as any).bind(router);
+  (router as any)[m] = (path: string, ...handlers: any[]) =>
+    orig(
+      path,
+      ...handlers.map((h) =>
+        typeof h === "function" && h.length < 4
+          ? (req: any, res: any, next: any) => Promise.resolve(h(req, res, next)).catch(next)
+          : h,
+      ),
+    );
+}
+
 // ---------------------- AUTH -----------------------------------------
 router.post("/auth/register", auth.register); // Pendonor / Pasien only
 router.post("/auth/register-pmi", auth.registerPmi); // PMI registration (terpisah)

@@ -48,6 +48,17 @@ export async function createSchedule(req: AuthedRequest, res: Response) {
   });
   if (!donor) return res.status(404).json({ error: "Profil pendonor tidak ditemukan" });
 
+  // Masa tunggu medis (cooldown) — pasca-donor (60 hari) ATAU pasca-skrining gagal.
+  // Selama cooldown aktif, donor tidak boleh mendaftar jadwal baru. FE sudah memblokir
+  // tombolnya; ini jaring pengaman di server (defense-in-depth) supaya tidak ada celah
+  // ~7 hari pasca-donor di mana skrining lama masih valid tapi donor belum boleh donor.
+  if (donor.cooldownUntil && donor.cooldownUntil > new Date()) {
+    const sampai = donor.cooldownUntil.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    return res.status(400).json({
+      error: `Anda masih dalam masa tunggu donor sampai ${sampai}, jadi belum bisa mendaftar jadwal baru.`,
+    });
+  }
+
   // Validasi PMI ada dan VERIFIED
   const pmi = await prisma.pMI.findUnique({ where: { id: parsed.data.pmiId } });
   if (!pmi) return res.status(400).json({ error: "PMI tidak ditemukan" });
