@@ -160,15 +160,30 @@ function Input(props: {
   type?: string; required?: boolean; minLength?: number;
   placeholder?: string; hint?: string;
 }) {
+  const [show, setShow] = useState(false);
+  const isPwd = props.type === "password";
   return (
     <div>
       <label className="block text-sm font-semibold text-slate-700 mb-1.5">{props.label}</label>
-      <input
-        type={props.type ?? "text"} required={props.required} minLength={props.minLength}
-        value={props.value} onChange={(e) => props.onChange(e.target.value)}
-        placeholder={props.placeholder}
-        className={inputCls}
-      />
+      <div className="relative">
+        <input
+          type={isPwd ? (show ? "text" : "password") : (props.type ?? "text")}
+          required={props.required} minLength={props.minLength}
+          value={props.value} onChange={(e) => props.onChange(e.target.value)}
+          placeholder={props.placeholder}
+          className={isPwd ? `${inputCls} pr-16` : inputCls}
+        />
+        {isPwd && (
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            aria-label={show ? "Sembunyikan password" : "Tampilkan password"}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
+          >
+            {show ? "🙈 Hide" : "👁 Show"}
+          </button>
+        )}
+      </div>
       {props.hint && <p className="text-xs text-slate-400 mt-1">{props.hint}</p>}
     </div>
   );
