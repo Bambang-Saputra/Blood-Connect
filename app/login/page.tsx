@@ -55,7 +55,9 @@ export default function LoginPage() {
         <div className="relative">
           <Link href="/" className="inline-flex items-center gap-2 group">
             <BloodDropIcon className="w-10 h-10 text-white group-hover:scale-110 transition" />
-            <span className="font-bold text-2xl">Blood<span className="text-pink-200">Connect</span></span>
+            <span className="font-bold text-2xl">
+              Blood<span className="text-pink-200">Connect</span>
+            </span>
           </Link>
         </div>
 
@@ -63,12 +65,11 @@ export default function LoginPage() {
         <div className="relative z-10">
           <BigHeartIllustration />
           <h2 className="text-4xl font-bold leading-tight mt-8">
-            Setetes Darah Anda,<br />
+            Setetes Darah Anda,
+            <br />
             <span className="text-pink-200">Sejuta Harapan</span>
           </h2>
-          <p className="mt-4 text-red-100 text-lg max-w-md">
-            Bergabung dengan ribuan pendonor di seluruh Indonesia. Bantu pasien yang membutuhkan, hari ini.
-          </p>
+          <p className="mt-4 text-red-100 text-lg max-w-md">Bergabung dengan ribuan pendonor di seluruh Indonesia. Bantu pasien yang membutuhkan, hari ini.</p>
         </div>
 
         {/* Stats Footer */}
@@ -85,7 +86,9 @@ export default function LoginPage() {
           {/* Mobile logo (only show on small screens) */}
           <Link href="/" className="lg:hidden flex items-center gap-2 mb-6">
             <BloodDropIcon className="w-8 h-8 text-red-600" />
-            <span className="font-bold text-xl text-slate-900">Blood<span className="text-red-600">Connect</span></span>
+            <span className="font-bold text-xl text-slate-900">
+              Blood<span className="text-red-600">Connect</span>
+            </span>
           </Link>
 
           <Link href="/" className="hidden lg:inline-flex items-center gap-1 text-sm text-slate-500 hover:text-red-600 mb-6">
@@ -100,7 +103,9 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <FormField label="Email">
               <input
-                type="email" required value={email}
+                type="email"
+                required
+                value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
                 placeholder="anda@email.com"
@@ -111,7 +116,9 @@ export default function LoginPage() {
             <FormField label="Password">
               <div className="relative">
                 <input
-                  type={showPwd ? "text" : "password"} required value={password}
+                  type={showPwd ? "text" : "password"}
+                  required
+                  value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full border border-slate-300 px-4 py-2.5 pr-16 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
                   placeholder="••••••••"
@@ -146,12 +153,12 @@ export default function LoginPage() {
               Daftar sebagai Pendonor/Pasien
             </Link>
           </p>
-          <p className="text-center text-xs text-slate-500 mt-2">
+          {/* <p className="text-center text-xs text-slate-500 mt-2">
             Anda institusi PMI?{" "}
             <Link href="/pmiregister" className="text-red-600 hover:text-red-700 font-semibold hover:underline">
               Daftar PMI di sini
             </Link>
-          </p>
+          </p> */}
         </div>
       </section>
     </main>
@@ -198,22 +205,13 @@ function BigHeartIllustration() {
     <svg viewBox="0 0 240 160" className="w-full max-w-sm">
       {/* Heart with cross */}
       <g transform="translate(120 70)">
-        <path
-          d="M0,-25 C-18,-50 -55,-42 -55,-12 C-55,18 -28,40 0,60 C28,40 55,18 55,-12 C55,-42 18,-50 0,-25 Z"
-          fill="white" fillOpacity="0.95"
-          className="drop-shadow-2xl"
-        />
+        <path d="M0,-25 C-18,-50 -55,-42 -55,-12 C-55,18 -28,40 0,60 C28,40 55,18 55,-12 C55,-42 18,-50 0,-25 Z" fill="white" fillOpacity="0.95" className="drop-shadow-2xl" />
         <rect x="-6" y="-12" width="12" height="32" fill="#dc2626" rx="2" />
         <rect x="-16" y="-2" width="32" height="12" fill="#dc2626" rx="2" />
       </g>
       {/* EKG pulse line */}
       <g transform="translate(0 130)">
-        <path
-          d="M10 10 L 80 10 L 90 0 L 100 25 L 110 -10 L 120 30 L 130 10 L 230 10"
-          stroke="white" strokeWidth="2.5" fill="none"
-          strokeLinecap="round" strokeLinejoin="round"
-          opacity="0.6"
-        />
+        <path d="M10 10 L 80 10 L 90 0 L 100 25 L 110 -10 L 120 30 L 130 10 L 230 10" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
       </g>
     </svg>
   );

@@ -24,13 +24,21 @@ function Header() {
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <BloodDropIcon className="w-8 h-8 text-red-600" />
-          <span className="font-bold text-xl text-slate-900">Blood<span className="text-red-600">Connect</span></span>
+          <span className="font-bold text-xl text-slate-900">
+            Blood<span className="text-red-600">Connect</span>
+          </span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8 text-sm">
-          <a href="#cara-kerja" className="text-slate-600 hover:text-red-600 transition">Cara Kerja</a>
-          <a href="#untuk-siapa" className="text-slate-600 hover:text-red-600 transition">Untuk Siapa</a>
-          <a href="#fitur" className="text-slate-600 hover:text-red-600 transition">Fitur</a>
+          <a href="#cara-kerja" className="text-slate-600 hover:text-red-600 transition">
+            Cara Kerja
+          </a>
+          <a href="#untuk-siapa" className="text-slate-600 hover:text-red-600 transition">
+            Untuk Siapa
+          </a>
+          <a href="#fitur" className="text-slate-600 hover:text-red-600 transition">
+            Fitur
+          </a>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -66,8 +74,10 @@ function Hero() {
           </span>
 
           <h1 className="text-5xl md:text-6xl font-bold text-slate-900 leading-tight">
-            Donasikan Darahmu,<br />
-            <span className="text-red-600">Selamatkan</span> <span className="relative inline-block">
+            Donasikan Darahmu,
+            <br />
+            <span className="text-red-600">Selamatkan</span>{" "}
+            <span className="relative inline-block">
               Nyawa
               <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 100 10">
                 <path d="M0,5 Q25,0 50,5 T100,5" stroke="#dc2626" strokeWidth="2" fill="none" strokeLinecap="round" />
@@ -76,12 +86,11 @@ function Hero() {
           </h1>
 
           <p className="mt-6 text-lg text-slate-600 max-w-lg">
-            Sistem terpusat yang menghubungkan <strong>Pendonor</strong>, <strong>Pasien</strong>, dan <strong>PMI</strong> secara real-time.
-            Tidak perlu lagi cari donor lewat media sosial.
+            Sistem terpusat yang menghubungkan <strong>Pendonor</strong>, <strong>Pasien</strong>, dan <strong>PMI</strong> secara real-time. Tidak perlu lagi cari donor lewat media sosial.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/register" className="group bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg shadow-red-600/30 hover:shadow-xl hover:shadow-red-600/40 transition flex items-center gap-2">
+            <Link href="/register?role=PENDONOR" className="group bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg shadow-red-600/30 hover:shadow-xl hover:shadow-red-600/40 transition flex items-center gap-2">
               Mulai Donasi
               <svg className="w-4 h-4 group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -123,7 +132,7 @@ function Hero() {
 function Stats() {
   const stats = [
     { value: "10.000+", label: "Pendonor Aktif", icon: "👥" },
-    { value: "500+", label: "PMI / UTD Partner", icon: "🏛️" },
+    { value: "500+", label: "PMI Partner", icon: "🏛️" },
     { value: "25.000+", label: "Nyawa Terselamatkan", icon: "❤️" },
     { value: "38", label: "Provinsi Terjangkau", icon: "📍" },
   ];
@@ -173,9 +182,7 @@ function HowItWorks() {
       <div className="text-center mb-12">
         <span className="text-red-600 text-sm font-semibold uppercase tracking-wide">Cara Kerja</span>
         <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">3 Langkah untuk Jadi Pahlawan</h2>
-        <p className="text-slate-600 mt-3 max-w-xl mx-auto">
-          Proses yang aman, terstandarisasi medis, dan transparan dari awal sampai darah Anda tiba ke pasien.
-        </p>
+        <p className="text-slate-600 mt-3 max-w-xl mx-auto">Proses yang aman, terstandarisasi medis, dan transparan dari awal sampai darah Anda tiba ke pasien.</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6 relative">
@@ -184,9 +191,7 @@ function HowItWorks() {
 
         {steps.map((s) => (
           <div key={s.n} className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition relative z-10 border border-red-50">
-            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-xl flex items-center justify-center mb-4">
-              {s.icon}
-            </div>
+            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-xl flex items-center justify-center mb-4">{s.icon}</div>
             <div className="text-xs font-bold text-red-600 mb-1">STEP {s.n}</div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">{s.title}</h3>
             <p className="text-slate-600 text-sm">{s.desc}</p>
@@ -204,7 +209,7 @@ function Roles() {
   const roles = [
     { icon: "💉", title: "Pendonor", desc: "Lacak riwayat donasi, dapatkan reminder jadwal, dan responi permintaan darurat di sekitar Anda.", color: "bg-red-50 border-red-200" },
     { icon: "🩺", title: "Pasien", desc: "Ajukan permintaan darah dalam hitungan detik. MatchSystem otomatis cari stok terdekat untuk Anda.", color: "bg-pink-50 border-pink-200" },
-    { icon: "🏛️", title: "PMI / UTD", desc: "Kelola stok darah, terima jadwal donor, dan akui permintaan pasien lewat jaringan nasional.", color: "bg-orange-50 border-orange-200" },
+    { icon: "🏛️", title: "PMI", desc: "Kelola stok darah, terima jadwal donor, dan akui permintaan pasien lewat jaringan nasional.", color: "bg-orange-50 border-orange-200" },
   ];
 
   return (
@@ -213,9 +218,7 @@ function Roles() {
         <div className="text-center mb-12">
           <span className="text-red-600 text-sm font-semibold uppercase tracking-wide">Untuk Siapa</span>
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">Satu Platform, Tiga Peran</h2>
-          <p className="text-slate-600 mt-3 max-w-xl mx-auto">
-            Blood Connect dirancang untuk seluruh ekosistem donor darah — dari pendonor sukarela, pasien, hingga PMI/UTD.
-          </p>
+          <p className="text-slate-600 mt-3 max-w-xl mx-auto">Blood Connect dirancang untuk seluruh ekosistem donor darah — dari pendonor sukarela, pasien, hingga PMI.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -274,17 +277,13 @@ function Features() {
       <div className="text-center mb-12">
         <span className="text-red-600 text-sm font-semibold uppercase tracking-wide">Fitur Unggulan</span>
         <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">Teknologi Modern, Solusi Nyata</h2>
-        <p className="text-slate-600 mt-3 max-w-xl mx-auto">
-          Dibangun dengan stack engineering kelas enterprise — transaksi serializable, validasi medis, dan kepatuhan data.
-        </p>
+        <p className="text-slate-600 mt-3 max-w-xl mx-auto">Dibangun dengan stack engineering kelas enterprise — transaksi serializable, validasi medis, dan kepatuhan data.</p>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {features.map((f) => (
           <div key={f.title} className="group p-6 rounded-2xl bg-white border border-slate-200 hover:border-red-300 hover:shadow-lg transition">
-            <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition">
-              {f.icon}
-            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition">{f.icon}</div>
             <h3 className="font-bold text-lg text-slate-900 mb-2">{f.title}</h3>
             <p className="text-sm text-slate-600 leading-relaxed">{f.desc}</p>
           </div>
@@ -309,12 +308,11 @@ function CallToAction() {
       <div className="relative max-w-4xl mx-auto px-6 text-center text-white">
         <BloodDropIcon className="w-16 h-16 mx-auto text-white mb-4" />
         <h2 className="text-3xl md:text-5xl font-bold leading-tight">
-          Setiap Tetes Darah Anda<br />
+          Setiap Tetes Darah Anda
+          <br />
           Menyelamatkan <span className="underline decoration-pink-200">3 Nyawa</span>
         </h2>
-        <p className="mt-6 text-lg text-red-100 max-w-2xl mx-auto">
-          Bergabunglah dengan ribuan pendonor di seluruh Indonesia. Daftar dalam 2 menit, donasi pertama kapan saja.
-        </p>
+        <p className="mt-6 text-lg text-red-100 max-w-2xl mx-auto">Bergabunglah dengan ribuan pendonor di seluruh Indonesia. Daftar dalam 2 menit, donasi pertama kapan saja.</p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
           <Link href="/register?role=PENDONOR" className="bg-white text-red-700 hover:bg-red-50 px-8 py-4 rounded-lg font-bold shadow-2xl hover:shadow-white/30 transition">
             Daftar Sebagai Pendonor
@@ -339,26 +337,50 @@ function Footer() {
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-3">
               <BloodDropIcon className="w-7 h-7 text-red-500" />
-              <span className="font-bold text-xl text-white">Blood<span className="text-red-500">Connect</span></span>
+              <span className="font-bold text-xl text-white">
+                Blood<span className="text-red-500">Connect</span>
+              </span>
             </div>
-            <p className="text-sm max-w-md">
-              Sistem terpusat distribusi & manajemen donor darah nasional. Dibangun untuk Indonesia, oleh Kelompok 1 — AOL Software Engineering BINUS.
-            </p>
+            <p className="text-sm max-w-md">Sistem terpusat distribusi & manajemen donor darah nasional. Dibangun untuk Indonesia, oleh Kelompok 1 — AOL Software Engineering BINUS.</p>
           </div>
           <div>
             <h4 className="text-white font-semibold mb-3 text-sm">Platform</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/register" className="hover:text-red-400">Daftar</Link></li>
-              <li><Link href="/login" className="hover:text-red-400">Masuk</Link></li>
-              <li><a href="#cara-kerja" className="hover:text-red-400">Cara Kerja</a></li>
-              <li><a href="#fitur" className="hover:text-red-400">Fitur</a></li>
+              <li>
+                <Link href="/register" className="hover:text-red-400">
+                  Daftar
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-red-400">
+                  Masuk
+                </Link>
+              </li>
+              <li>
+                <a href="#cara-kerja" className="hover:text-red-400">
+                  Cara Kerja
+                </a>
+              </li>
+              <li>
+                <a href="#fitur" className="hover:text-red-400">
+                  Fitur
+                </a>
+              </li>
             </ul>
           </div>
           <div>
             <h4 className="text-white font-semibold mb-3 text-sm">Bantuan</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#" className="hover:text-red-400">FAQ</a></li>
-              <li><a href="#" className="hover:text-red-400">Kontak Support</a></li>
+              <li>
+                <a href="#" className="hover:text-red-400">
+                  FAQ
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-red-400">
+                  Kontak Support
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -394,8 +416,7 @@ function FloatingHeart({ className, style }: { className?: string; style?: React
 function ClipboardIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
     </svg>
   );
 }
@@ -403,8 +424,7 @@ function ClipboardIcon({ className }: { className?: string }) {
 function StethoscopeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4.5 12.75l6 6 9-13.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
     </svg>
   );
 }
@@ -412,8 +432,7 @@ function StethoscopeIcon({ className }: { className?: string }) {
 function HeartHandIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
     </svg>
   );
 }
@@ -421,8 +440,7 @@ function HeartHandIcon({ className }: { className?: string }) {
 function LightningIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M13 10V3L4 14h7v7l9-11h-7z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   );
 }
@@ -430,8 +448,7 @@ function LightningIcon({ className }: { className?: string }) {
 function RefreshIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   );
 }
@@ -439,8 +456,12 @@ function RefreshIcon({ className }: { className?: string }) {
 function ShieldCheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+      />
     </svg>
   );
 }
@@ -448,10 +469,8 @@ function ShieldCheckIcon({ className }: { className?: string }) {
 function MapPinIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   );
 }
@@ -459,8 +478,7 @@ function MapPinIcon({ className }: { className?: string }) {
 function DocumentIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   );
 }
@@ -468,8 +486,12 @@ function DocumentIcon({ className }: { className?: string }) {
 function BellIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+      />
     </svg>
   );
 }
@@ -500,11 +522,7 @@ function HeroIllustration() {
         {/* Heart shape with cross */}
         <g transform="translate(200 180)">
           {/* Heart background */}
-          <path
-            d="M0,-30 C-20,-60 -60,-50 -60,-15 C-60,20 -30,45 0,70 C30,45 60,20 60,-15 C60,-50 20,-60 0,-30 Z"
-            fill="#dc2626"
-            className="drop-shadow-2xl"
-          />
+          <path d="M0,-30 C-20,-60 -60,-50 -60,-15 C-60,20 -30,45 0,70 C30,45 60,20 60,-15 C60,-50 20,-60 0,-30 Z" fill="#dc2626" className="drop-shadow-2xl" />
           {/* White cross */}
           <rect x="-8" y="-15" width="16" height="40" fill="white" rx="2" />
           <rect x="-20" y="-3" width="40" height="16" fill="white" rx="2" />
@@ -521,14 +539,7 @@ function HeroIllustration() {
 
         {/* Pulse/heartbeat line */}
         <g transform="translate(0 250)">
-          <path
-            d="M50 30 L 100 30 L 110 10 L 120 50 L 130 0 L 140 60 L 150 30 L 350 30"
-            stroke="#dc2626"
-            strokeWidth="3"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M50 30 L 100 30 L 110 10 L 120 50 L 130 0 L 140 60 L 150 30 L 350 30" stroke="#dc2626" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </g>
 
         {/* Sparkle/star decorations */}
@@ -560,21 +571,9 @@ function HeroIllustration() {
 }
 
 function BloodDrop({ x, y, size }: { x: number; y: number; size: number }) {
-  return (
-    <path
-      transform={`translate(${x} ${y}) scale(${size / 20})`}
-      d="M0,-10 C-7,0 -10,5 -10,8 A10,10 0 0 0 10,8 C10,5 7,0 0,-10 Z"
-      fill="#dc2626"
-      opacity="0.7"
-    />
-  );
+  return <path transform={`translate(${x} ${y}) scale(${size / 20})`} d="M0,-10 C-7,0 -10,5 -10,8 A10,10 0 0 0 10,8 C10,5 7,0 0,-10 Z" fill="#dc2626" opacity="0.7" />;
 }
 
 function Sparkle({ x, y }: { x: number; y: number }) {
-  return (
-    <path
-      transform={`translate(${x} ${y})`}
-      d="M0,-8 L2,-2 L8,0 L2,2 L0,8 L-2,2 L-8,0 L-2,-2 Z"
-    />
-  );
+  return <path transform={`translate(${x} ${y})`} d="M0,-8 L2,-2 L8,0 L2,2 L0,8 L-2,2 L-8,0 L-2,-2 Z" />;
 }

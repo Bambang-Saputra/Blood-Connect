@@ -18,9 +18,17 @@ export default function PmiRegisterPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [form, setForm] = useState({
-    email: "", password: "", name: "", phoneNum: "",
-    province: "", city: "", zone: "", address: "",
-    pmiName: "", pmiCode: "", pmiLoc: "",
+    email: "",
+    password: "",
+    name: "",
+    phoneNum: "",
+    province: "",
+    city: "",
+    zone: "",
+    address: "",
+    pmiName: "",
+    pmiCode: "",
+    pmiLoc: "",
     licenseDoc: "",
   });
 
@@ -48,19 +56,16 @@ export default function PmiRegisterPage() {
     return (
       <main className="min-h-screen bg-gradient-to-br from-red-50 via-white to-pink-50 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center">
-          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center text-4xl shadow-lg mb-4">
-            ✅
-          </div>
+          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center text-4xl shadow-lg mb-4">✅</div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Pendaftaran Berhasil</h2>
           <p className="text-slate-600 text-sm">
-            Akun PMI Anda berhasil dibuat dengan status <strong>UNVERIFIED</strong>.
-            Tim admin Blood Connect akan memverifikasi akun Anda dalam 1×24 jam.
+            Akun PMI Anda berhasil dibuat dengan status <strong>UNVERIFIED</strong>. Tim admin Blood Connect akan memverifikasi akun Anda dalam 1×24 jam.
           </p>
-          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-3 text-left text-xs text-amber-800">
-            ℹ️ Setelah diverifikasi, Anda bisa login dan mengelola stok, request, dan jadwal donor.
-          </div>
+          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-3 text-left text-xs text-amber-800">ℹ️ Setelah diverifikasi, Anda bisa login dan mengelola stok, request, dan jadwal donor.</div>
           <Link href="/login">
-            <Button size="lg" fullWidth className="mt-6">Lanjut ke Login</Button>
+            <Button size="lg" fullWidth className="mt-6">
+              Lanjut ke Login
+            </Button>
           </Link>
         </div>
       </main>
@@ -73,12 +78,12 @@ export default function PmiRegisterPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
             <BloodDropIcon className="w-9 h-9 text-red-600" />
-            <span className="font-bold text-2xl text-slate-900">Blood<span className="text-red-600">Connect</span></span>
+            <span className="font-bold text-2xl text-slate-900">
+              Blood<span className="text-red-600">Connect</span>
+            </span>
           </Link>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900">Pendaftaran PMI</h1>
-          <p className="text-slate-500 mt-2 max-w-xl mx-auto">
-            Form ini khusus untuk PMI/UTD daerah yang ingin terhubung dengan jaringan Blood Connect nasional.
-          </p>
+          <p className="text-slate-500 mt-2 max-w-xl mx-auto">Form ini khusus untuk PMI daerah yang ingin terhubung dengan jaringan Blood Connect nasional.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 md:p-8 space-y-5">
@@ -97,11 +102,7 @@ export default function PmiRegisterPage() {
           <div>
             <h3 className="font-semibold text-slate-900 mb-3">📍 Lokasi PIC</h3>
             <div className="grid md:grid-cols-2 gap-3">
-              <RegionPicker
-                province={form.province} city={form.city}
-                onChange={({ province, city, zone }) => setForm((f) => ({ ...f, province, city, zone }))}
-                required
-              />
+              <RegionPicker province={form.province} city={form.city} onChange={({ province, city, zone }) => setForm((f) => ({ ...f, province, city, zone }))} required />
               <div className="md:col-span-2">
                 <Input label="Alamat PIC (opsional)" value={form.address} onChange={(v) => update("address", v)} />
               </div>
@@ -110,7 +111,7 @@ export default function PmiRegisterPage() {
 
           {/* Data PMI institusi */}
           <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-xl p-4">
-            <h3 className="font-semibold text-slate-900 mb-3">🏛️ Data PMI / UTD</h3>
+            <h3 className="font-semibold text-slate-900 mb-3">🏛️ Data PMI </h3>
             <div className="grid md:grid-cols-2 gap-3">
               <Input label="Nama PMI" value={form.pmiName} onChange={(v) => update("pmiName", v)} required placeholder="PMI Provinsi DKI Jakarta" />
               <Input label="Kode PMI (unik)" value={form.pmiCode} onChange={(v) => update("pmiCode", v)} required placeholder="PMI-DKI-01" />
@@ -128,13 +129,16 @@ export default function PmiRegisterPage() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-              <span>⚠️</span><span>{error}</span>
+              <span>⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
           <div className="flex gap-3 pt-2">
             <Link href="/register" className="flex-shrink-0">
-              <Button type="button" variant="ghost">← Bukan PMI</Button>
+              <Button type="button" variant="ghost">
+                ← Bukan PMI
+              </Button>
             </Link>
             <Button type="submit" loading={loading} size="lg" fullWidth icon={<Icons.Heart />}>
               Kirim Permohonan
@@ -155,11 +159,7 @@ export default function PmiRegisterPage() {
 
 const inputCls = "w-full border border-slate-300 px-4 py-2.5 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition";
 
-function Input(props: {
-  label: string; value: string; onChange: (v: string) => void;
-  type?: string; required?: boolean; minLength?: number;
-  placeholder?: string; hint?: string;
-}) {
+function Input(props: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; minLength?: number; placeholder?: string; hint?: string }) {
   const [show, setShow] = useState(false);
   const isPwd = props.type === "password";
   return (
@@ -168,8 +168,10 @@ function Input(props: {
       <div className="relative">
         <input
           type={isPwd ? (show ? "text" : "password") : (props.type ?? "text")}
-          required={props.required} minLength={props.minLength}
-          value={props.value} onChange={(e) => props.onChange(e.target.value)}
+          required={props.required}
+          minLength={props.minLength}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
           placeholder={props.placeholder}
           className={isPwd ? `${inputCls} pr-16` : inputCls}
         />

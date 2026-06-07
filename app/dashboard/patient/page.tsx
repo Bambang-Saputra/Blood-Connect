@@ -25,10 +25,13 @@ const HOSPITALS: { name: string; address: string; city: string }[] = [
   { name: "RSUP Prof. Ngoerah (Sanglah)", address: "Jl. Diponegoro, Dauh Puri Klod, Denpasar", city: "Denpasar" },
   { name: "RSUP Dr. Wahidin Sudirohusodo", address: "Jl. Perintis Kemerdekaan KM.11, Makassar", city: "Makassar" },
 ];
-const HOSPITALS_BY_CITY = HOSPITALS.reduce((acc, h) => {
-  (acc[h.city] ??= []).push(h);
-  return acc;
-}, {} as Record<string, typeof HOSPITALS>);
+const HOSPITALS_BY_CITY = HOSPITALS.reduce(
+  (acc, h) => {
+    (acc[h.city] ??= []).push(h);
+    return acc;
+  },
+  {} as Record<string, typeof HOSPITALS>,
+);
 
 /**
  * DASHBOARD: PASIEN
@@ -57,7 +60,9 @@ export default function PatientDashboard() {
 
   async function refresh() {
     setLoading(true);
-    const data = await api("/requests?mine=true").then((r) => r.json()).catch(() => ({ data: [] }));
+    const data = await api("/requests?mine=true")
+      .then((r) => r.json())
+      .catch(() => ({ data: [] }));
     setRequests(data.data ?? []);
     setLoading(false);
   }
@@ -112,18 +117,25 @@ export default function PatientDashboard() {
       {/* Header */}
       <header className="flex flex-wrap gap-4 justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-red-700 to-red-500 bg-clip-text text-transparent">
-            Dashboard Pasien
-          </h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-red-700 to-red-500 bg-clip-text text-transparent">Dashboard Pasien</h1>
           <p className="text-sm text-slate-500 mt-1">Ajukan permintaan darah & pantau statusnya</p>
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell />
           <Link href="/dashboard/patient/profile">
-            <Button variant="ghost" size="sm" icon={<Icons.User />}>Profil</Button>
+            <Button variant="ghost" size="sm" icon={<Icons.User />}>
+              Profil
+            </Button>
           </Link>
-          <Button variant="ghost" size="sm" icon={<Icons.Logout />}
-            onClick={() => { clearToken(); location.href = "/"; }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Icons.Logout />}
+            onClick={() => {
+              clearToken();
+              location.href = "/";
+            }}
+          >
             Keluar
           </Button>
         </div>
@@ -137,24 +149,36 @@ export default function PatientDashboard() {
       </section>
 
       {/* Form Request */}
-      <Card
-        title="Ajukan Permintaan Darah"
-        subtitle="Broadcast ke semua PMI nasional — PMI pertama yang accept akan memproses"
-        icon={<Icons.Drop />}
-        variant="highlight"
-      >
+      <Card title="Ajukan Permintaan Darah" subtitle="Broadcast ke semua PMI nasional — PMI pertama yang accept akan memproses" icon={<Icons.Drop />} variant="highlight">
         <form onSubmit={submitRequest} className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <SelectField label="Golongan Darah" value={form.bloodType}
+            <SelectField
+              label="Golongan Darah"
+              value={form.bloodType}
               onChange={(v) => setForm({ ...form, bloodType: v })}
-              options={[["A", "A"], ["B", "B"], ["AB", "AB"], ["O", "O"]]} />
-            <SelectField label="Rhesus" value={form.rhesusType}
+              options={[
+                ["A", "A"],
+                ["B", "B"],
+                ["AB", "AB"],
+                ["O", "O"],
+              ]}
+            />
+            <SelectField
+              label="Rhesus"
+              value={form.rhesusType}
               onChange={(v) => setForm({ ...form, rhesusType: v })}
-              options={[["POSITIVE", "Rh+"], ["NEGATIVE", "Rh-"]]} />
+              options={[
+                ["POSITIVE", "Rh+"],
+                ["NEGATIVE", "Rh-"],
+              ]}
+            />
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Jumlah Kantong</label>
               <input
-                type="number" min={1} step={1} required
+                type="number"
+                min={1}
+                step={1}
+                required
                 value={form.quantity}
                 onChange={(e) => {
                   // Strip leading zeros + reject negative on input.
@@ -194,10 +218,16 @@ export default function PatientDashboard() {
               }}
               className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
             >
-              <option value="" disabled>— Pilih Rumah Sakit —</option>
+              <option value="" disabled>
+                — Pilih Rumah Sakit —
+              </option>
               {Object.entries(HOSPITALS_BY_CITY).map(([city, list]) => (
                 <optgroup key={city} label={city}>
-                  {list.map((h) => <option key={h.name} value={h.name}>{h.name}</option>)}
+                  {list.map((h) => (
+                    <option key={h.name} value={h.name}>
+                      {h.name}
+                    </option>
+                  ))}
                 </optgroup>
               ))}
               <option value="__manual__">Lainnya (isi manual)…</option>
@@ -206,7 +236,8 @@ export default function PatientDashboard() {
             {useManualHospital ? (
               <div className="grid md:grid-cols-2 gap-2">
                 <input
-                  type="text" required
+                  type="text"
+                  required
                   value={form.targetHospitalName}
                   onChange={(e) => setForm({ ...form, targetHospitalName: e.target.value })}
                   placeholder="Nama RS tempat pasien dirawat"
@@ -230,7 +261,8 @@ export default function PatientDashboard() {
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Alasan / Keterangan (opsional)</label>
             <textarea
-              rows={2} value={form.reason}
+              rows={2}
+              value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               placeholder="Contoh: Pasca operasi caesar, perlu transfusi"
               className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition text-sm resize-none"
@@ -247,32 +279,26 @@ export default function PatientDashboard() {
       <Card title={`Status Permintaan Saya (${requests.length})`} icon={<Icons.Calendar />}>
         {loading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />)}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+            ))}
           </div>
         ) : requests.length === 0 ? (
-          <EmptyState
-            icon="📭"
-            title="Belum ada permintaan"
-            description="Ajukan permintaan darah lewat form di atas."
-          />
+          <EmptyState icon="📭" title="Belum ada permintaan" description="Ajukan permintaan darah lewat form di atas." />
         ) : (
           <div className="space-y-2">
             {requests.map((r) => (
-              <div key={r.id}
-                className="p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition group">
+              <div key={r.id} className="p-4 bg-white border border-slate-200 rounded-xl hover:border-red-300 hover:shadow-sm transition group">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 text-white rounded-xl flex items-center justify-center font-bold shadow-sm group-hover:scale-110 transition">
-                      {r.bloodType}{r.rhesusType === "POSITIVE" ? "+" : "-"}
+                      {r.bloodType}
+                      {r.rhesusType === "POSITIVE" ? "+" : "-"}
                     </div>
                     <div>
                       <p className="font-semibold text-slate-900">{r.quantity} kantong</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        🏥 {r.targetHospitalName ?? "—"}
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        {new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
-                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">🏥 {r.targetHospitalName ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400">{new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -290,9 +316,7 @@ export default function PatientDashboard() {
                       {r.acceptedByPmi.user?.phoneNum && <span>📞 {r.acceptedByPmi.user.phoneNum}</span>}
                       {r.acceptedByPmi.user?.email && <span>✉️ {r.acceptedByPmi.user.email}</span>}
                     </div>
-                    <p className="text-[10px] text-blue-600/70 pt-0.5">
-                      Hubungi PMI ini untuk koordinasi pengantaran darah.
-                    </p>
+                    <p className="text-[10px] text-blue-600/70 pt-0.5">Hubungi PMI ini untuk koordinasi pengantaran darah.</p>
                   </div>
                 )}
               </div>
@@ -316,15 +340,16 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
   );
 }
 
-function SelectField({ label, value, onChange, options }: {
-  label: string; value: string; onChange: (v: string) => void; options: [string, string][];
-}) {
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition">
-        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-slate-300 px-3 py-2 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition">
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
       </select>
     </div>
   );
@@ -337,13 +362,13 @@ function SelectField({ label, value, onChange, options }: {
 function UrgencyBadge({ urgency }: { urgency: string }) {
   const cfg: Record<string, { label: string; cls: string }> = {
     CRITICAL: { label: "🔴 Stok Kritis", cls: "bg-red-100 text-red-700 border-red-200" },
-    URGENT:   { label: "🟠 Stok Tipis",  cls: "bg-amber-100 text-amber-700 border-amber-200" },
-    NORMAL:   { label: "🟢 Stok Cukup",  cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    URGENT: { label: "🟠 Stok Tipis", cls: "bg-amber-100 text-amber-700 border-amber-200" },
+    NORMAL: { label: "🟢 Stok Cukup", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
   };
   const c = cfg[urgency] ?? cfg.NORMAL;
-  return (
-    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${c.cls}`}>
-      {c.label}
-    </span>
-  );
+  // return (
+  //   <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${c.cls}`}>
+  //     {c.label}
+  //   </span>
+  // );
 }

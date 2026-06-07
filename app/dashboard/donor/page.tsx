@@ -619,7 +619,7 @@ export default function DonorDashboard() {
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Tanggal Kedatangan</label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={scheduleForm.jadwal}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, jadwal: e.target.value })}
                   required
