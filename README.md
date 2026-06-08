@@ -444,6 +444,20 @@ Semua route handler dibungkus `Promise.resolve(h()).catch(next)`. Error async ta
 
 ---
 
+## ✨ Detail UX / Frontend
+
+Sentuhan kecil yang bikin alur terasa rapi & ramah — **tanpa** mengubah database/flow inti:
+
+- **Toggle lihat/sembunyikan password** (`👁 Show` / `🙈 Hide`) di **semua** form: login, register, registrasi PMI, dan ganti password di profil. Default tersembunyi + `aria-label` untuk pembaca layar.
+- **Dialog konfirmasi ber-styling** (`app/lib/confirmDialog.ts`) — pengganti `window.confirm` bawaan. Promise-based, tanpa dependency, dipakai untuk aksi sensitif (batalkan/ganti jadwal donor, tutup broadcast, accept/ubah status request, verifikasi PMI).
+- **Toast non-blocking** (`app/lib/toast.ts`) — feedback sukses/gagal tanpa `alert()` yang mengganggu.
+- **Banner status donor adaptif** — membedakan **"Lolos Skrining — Siap Daftar Jadwal"**, **"Masa Tunggu Pasca-Donor"**, dan **"Skrining Belum Lengkap"**; dilengkapi kartu **hasil kunjungan terakhir** (cek fisik lolos/gagal) + pill status jadwal (*Menunggu Konfirmasi* / *Dikonfirmasi PMI*).
+- **PMI diurutkan jarak terdekat** saat donor memilih lokasi (kota → zona → provinsi → nasional), dengan *empty-state* jelas bila tak ada PMI terdekat.
+- **Skrining kadaluarsa auto-reset** (`validUntil` 7 hari) — donor bisa isi ulang, tidak stuck di state lama.
+- **Profil: gender & status** ditampilkan read-only yang konsisten dengan dashboard ("Status Skrining", bukan flag mentah yang membingungkan).
+
+---
+
 ## 🗃️ Skema Database (15 model)
 
 | Model | Tujuan |
